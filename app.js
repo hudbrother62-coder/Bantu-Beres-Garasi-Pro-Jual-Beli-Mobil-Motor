@@ -5,7 +5,7 @@ const app = document.querySelector('#app');
 let state={session:null,showroom:null,view:'dashboard',vehicles:[],costs:[],customers:[],leads:[],sales:[],accounts:[],transactions:[]};
 const rupiah=n=>new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(Number(n||0));
 const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-const mark=()=>'<span class="brand-mark"><svg viewBox="0 0 24 24"><path d="m5 12 4.3 4.3L19 6.7"/></svg></span>';
+const mark=()=>'<span class="brand-mark logo-bantuberes" role="img" aria-label="BantuBeres"></span>';
 function toast(msg){const el=document.querySelector('#toast');el.textContent=msg;el.classList.add('toast-show');setTimeout(()=>el.classList.remove('toast-show'),3200)}
 function status(s){return `<span class="status ${String(s).replaceAll(' ','_')}">${esc(String(s).replaceAll('_',' '))}</span>`}
 async function init(){const {data:{session}}=await db.auth.getSession();state.session=session;if(!session)return renderAuth();await loadShowroom();}
