@@ -1677,16 +1677,16 @@ function printReport(type) {
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
   frame.style.cssText = "position:fixed;width:0;height:0;border:0;right:0;bottom:0";
-  document.body.appendChild(frame);
   const printWindow = frame.contentWindow;
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
   frame.onload = () => {
     printWindow.focus();
     printWindow.print();
     setTimeout(() => frame.remove(), 1000);
   };
+  document.body.appendChild(frame);
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
 }
 const bindPageBeforePrintableReports = bindPage;
 bindPage = function () {
