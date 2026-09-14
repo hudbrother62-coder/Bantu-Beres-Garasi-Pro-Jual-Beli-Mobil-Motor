@@ -46,7 +46,7 @@ db.auth.onAuthStateChange((_event,session)=>{if(!session&&state.session){state.s
 /* Garasi Pro UX v2 — mobile, theme, accounting and reversible transactions */
 const today=()=>new Date().toISOString().slice(0,10);
 let vehicleKind='all', financePeriod='all';
-const logo=(variant='mark')=>`<span class="bb-logo ${variant}" role="img" aria-label="Bantu Beres"></span>`;
+const logo=(variant='mark')=>`<span class="bb-logo logo-bantuberes ${variant}" role="img" aria-label="Bantu Beres"></span>`;
 function setTheme(value){document.documentElement.dataset.theme=value;localStorage.setItem('garasi-pro-theme',value);document.querySelector('meta[name="theme-color"]').content=value==='dark'?'#11151d':'#592d91'}
 setTheme(localStorage.getItem('garasi-pro-theme')||'light');
 toast=function(msg,kind='success'){const el=document.querySelector('#toast');el.className=`toast-show ${kind}`;el.innerHTML=`<strong>${kind==='error'?'Perlu diperiksa':'Berhasil'}</strong><span>${esc(msg)}</span>`;clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>el.className='',3600)};
