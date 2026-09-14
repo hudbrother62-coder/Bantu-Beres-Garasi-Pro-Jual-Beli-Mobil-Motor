@@ -12,6 +12,7 @@ const mobileIcons = {
   leads: "follow_the_signs",
   reports: "bar_chart",
   settings: "settings",
+  team: "groups",
 };
 function renderShellMobileV3() {
   const user =
@@ -72,6 +73,8 @@ function renderShellMobileV3() {
 let state = {
   session: null,
   showroom: null,
+  member: null,
+  team: [],
   view: "dashboard",
   vehicles: [],
   costs: [],
@@ -116,13 +119,26 @@ async function init() {
   await loadShowroom();
 }
 async function loadShowroom() {
-  const { data, error } = await db
-    .from("showrooms")
-    .select("*")
-    .eq("owner_id", state.session.user.id)
+  const { data: memberships, error: memberError } = await db
+    .from("showroom_members")
+    .select("showroom_id,user_id,role,full_name,username,is_active,showrooms(*)")
+    .eq("user_id", state.session.user.id)
+    .eq("is_active", true)
     .limit(1);
-  if (error) return toast(error.message);
-  state.showroom = data?.[0];
+  if (memberError) return toast(memberError.message, "error");
+  const membership = memberships?.[0];
+  state.member = membership || null;
+  state.showroom = membership?.showrooms || null;
+  if (!state.showroom) {
+    const { data, error } = await db
+      .from("showrooms")
+      .select("*")
+      .eq("owner_id", state.session.user.id)
+      .limit(1);
+    if (error) return toast(error.message, "error");
+    state.showroom = data?.[0] || null;
+    if (state.showroom) state.member = { role: "owner", user_id: state.session.user.id, is_active: true };
+  }
   if (!state.showroom) return renderOnboarding();
   await loadData();
   renderShell();
@@ -143,7 +159,7 @@ async function loadData() {
       .order("created_at", { ascending: false }),
     db
       .from("leads")
-      .select("*, customers(full_name), vehicles(brand,model,year)")
+      .select("*, customers(full_name,phone), vehicles(brand,model,year)")
       .eq("showroom_id", id)
       .order("created_at", { ascending: false }),
     db
@@ -173,6 +189,8 @@ async function loadData() {
     transactions: t.data || [],
     photos: ph.data || [],
   });
+  if (state.member?.role === "owner") await loadTeam();
+  else state.team = [];
 }
 function renderAuth() {
   app.innerHTML = `<main class="auth"><section class="auth-card"><div class="brand">${mark()}<span>Bantu Beres Garasi Pro</span></div><h1>Kelola showroom lebih jelas.</h1><p>Catat mobil atau motor, hitung modal sebenarnya, dan pantau penjualan per unit.</p><div class="tabs"><button class="active" data-auth="login">Masuk</button><button data-auth="register">Daftar</button></div><form id="authForm"><label>Username</label><input name="username" required autocomplete="username" placeholder="Contoh: garasimaju"><label>Kata sandi</label><input type="password" name="password" required autocomplete="current-password" minlength="6" placeholder="Minimal 6 karakter"><button class="button full">Masuk ke aplikasi</button></form><p class="hint">Tidak memerlukan email aktif. Setiap showroom memiliki ruang data sendiri.</p></section></main>`;
@@ -284,12 +302,16 @@ async function setupShowroom(e) {
     showroom_id: data.id,
     user_id: state.session.user.id,
     role: "owner",
+    full_name: state.session.user.user_metadata?.full_name || "Owner",
+    username: state.session.user.user_metadata?.username || state.session.user.email.split("@")[0],
+    is_active: true,
   });
   if (r.error) return toast(r.error.message);
   await db
     .from("cash_accounts")
     .insert({ showroom_id: data.id, name: "Kas Utama", account_type: "cash" });
   state.showroom = data;
+  state.member = { showroom_id: data.id, user_id: state.session.user.id, role: "owner", is_active: true };
   await loadData();
   renderShell();
   toast("Showroom berhasil dibuat");
@@ -585,6 +607,14 @@ async function saveForm(e, type, id, modal) {
     transaction: "cash_transactions",
   }[type];
   raw.showroom_id = state.showroom.id;
+  if (type === "customer" && state.member?.role === "sales") {
+    raw.assigned_to = state.session.user.id;
+    raw.created_by = state.session.user.id;
+  }
+  if (type === "lead" && state.member?.role === "sales")
+    raw.assigned_to = state.session.user.id;
+  if (type === "sale" && state.member?.role === "sales")
+    raw.sales_person_id = state.session.user.id;
   if (type === "vehicle") {
     delete raw.code;
     if (state.showroom.business_type !== "both")
@@ -1330,3 +1360,147 @@ bindPage = function () {
 };
 
 renderShell = renderShellApproved;
+
+/* Team access: Owner, Sales, and Admin Operasional. */
+const ownerDashboardView = dashboard;
+const ownerVehiclesView = vehicles;
+const ownerSalesView = sales;
+const ownerCustomersView = customers;
+const ownerLeadsView = leads;
+const baseBindPageForRoles = bindPage;
+
+function currentRole() {
+  return state.member?.role || "owner";
+}
+function roleLabel(role = currentRole()) {
+  return role === "owner" ? "Owner" : role === "sales" ? "Sales" : "Admin Operasional";
+}
+function allowedNavigation() {
+  const ids = currentRole() === "owner"
+    ? ["dashboard", "vehicles", "sales", "finance", "costs", "customers", "leads", "reports", "team", "settings"]
+    : currentRole() === "sales"
+      ? ["dashboard", "vehicles", "customers", "leads", "sales", "reports"]
+      : ["dashboard", "vehicles", "sales", "finance", "costs", "customers", "reports"];
+  const labels = Object.fromEntries(navV2.map(([id, label, icon]) => [id, [label, icon]]));
+  labels.team = ["Tim", "groups"];
+  return ids.map((id) => [id, labels[id]?.[0] || id, labels[id]?.[1] || mobileIcons[id] || "circle"]);
+}
+function ensureAllowedView() {
+  const allowed = allowedNavigation().map(([id]) => id);
+  if (!allowed.includes(state.view)) state.view = "dashboard";
+}
+function roleDashboard() {
+  if (currentRole() === "owner") return ownerDashboardView();
+  if (currentRole() === "sales") {
+    const open = state.leads.filter((x) => !["closed", "lost"].includes(x.status));
+    const followups = open.filter((x) => x.next_follow_up_at).sort((a, b) => new Date(a.next_follow_up_at) - new Date(b.next_follow_up_at));
+    return `${pageHead("Dashboard Sales", "Customer dan follow-up yang menjadi tanggung jawab kamu.", '<button class="button primary-action" data-modal="customer">+ Tambah customer</button>')}<div class="metric-grid"><div class="metric"><div class="label">CUSTOMER SAYA</div><div class="value">${state.customers.length}</div><div class="meta">Customer yang ditugaskan</div></div><div class="metric"><div class="label">FOLLOW-UP AKTIF</div><div class="value">${open.length}</div><div class="meta">Belum closing atau tidak lanjut</div></div><div class="metric"><div class="label">CLOSING</div><div class="value up">${state.leads.filter((x) => x.status === "closed").length}</div><div class="meta">Lead berhasil closing</div></div><div class="metric"><div class="label">PENJUALAN SAYA</div><div class="value">${state.sales.length}</div><div class="meta">Transaksi yang tercatat</div></div></div><section class="panel"><h2>Follow-up berikutnya</h2><p class="sub">Hubungi customer langsung dari nomor WhatsApp.</p>${followups.slice(0, 6).map((lead) => `<div class="team-row"><div><strong>${esc(lead.customers?.full_name || "Customer")}</strong><span>${esc(leadDate(lead.next_follow_up_at))}</span></div>${waButton(lead.customers?.phone, "Hubungi")}</div>`).join("") || '<div class="empty">Belum ada jadwal follow-up.</div>'}</section>`;
+  }
+  return `${pageHead("Dashboard Operasional", "Ringkasan stok, transaksi, dan pekerjaan administrasi.", '<button class="button primary-action" data-modal="vehicle">+ Tambah kendaraan</button>')}<div class="metric-grid"><div class="metric"><div class="label">UNIT AKTIF</div><div class="value">${state.vehicles.filter((v) => !["sold","delivered","cancelled"].includes(v.status)).length}</div><div class="meta">Stok yang masih diproses</div></div><div class="metric"><div class="label">UNIT TERJUAL</div><div class="value">${state.sales.length}</div><div class="meta">Seluruh transaksi</div></div><div class="metric"><div class="label">BELUM LUNAS</div><div class="value warn">${state.sales.filter((s) => s.payment_status !== "paid").length}</div><div class="meta">Perlu pemeriksaan pembayaran</div></div><div class="metric"><div class="label">CUSTOMER</div><div class="value">${state.customers.length}</div><div class="meta">Data administrasi</div></div></div><section class="panel"><h2>Unit terbaru</h2>${state.vehicles.slice(0, 6).map((v) => `<div class="team-row"><div><strong>${esc(v.brand)} ${esc(v.model)}</strong><span>${esc(v.code)} · ${esc(v.status)}</span></div></div>`).join("") || '<div class="empty">Belum ada kendaraan.</div>'}</section>`;
+}
+function salesRoleView() {
+  if (currentRole() === "owner") return ownerSalesView();
+  const canCreate = currentRole() === "sales" || currentRole() === "admin";
+  return `${pageHead("Penjualan", currentRole() === "sales" ? "Penjualan yang tercatat atas nama kamu." : "Kelola transaksi dan status pembayaran.", canCreate ? '<button class="button primary-action" data-modal="sale">+ Catat penjualan</button>' : "")}<div class="panel data-panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Nota</th><th>Unit & customer</th><th>Nilai transaksi</th><th>Diterima</th><th>Status</th>${currentRole() === "admin" ? "<th>Aksi</th>" : ""}</tr></thead><tbody>${state.sales.map((s) => { const m=saleMetrics(s); return `<tr><td><strong>${esc(s.invoice_number)}</strong><br><small>${esc(s.sale_date)}</small></td><td>${esc(s.vehicles ? `${s.vehicles.brand} ${s.vehicles.model}` : "-")}<br><small>${esc(s.customers?.full_name || "-")}</small></td><td>${rupiah(m.net)}</td><td>${rupiah(s.paid_amount)}</td><td>${status(s.payment_status)}</td>${currentRole() === "admin" ? `<td><button class="button secondary compact" data-edit-sale="${s.id}">Ubah</button></td>` : ""}</tr>`; }).join("") || `<tr><td colspan="6"><div class="empty">Belum ada penjualan.</div></td></tr>`}</tbody></table></div></div>`;
+}
+function waLink(phone) {
+  let number = String(phone || "").replace(/\D/g, "");
+  if (number.startsWith("0")) number = `62${number.slice(1)}`;
+  return number ? `https://wa.me/${number}` : "";
+}
+function waButton(phone, label = "WhatsApp") {
+  const href = waLink(phone);
+  return href ? `<a class="button whatsapp compact" href="${href}" target="_blank" rel="noopener"><span class="material-symbols-rounded">chat</span>${label}</a>` : '<span class="muted">Nomor belum diisi</span>';
+}
+function customersRoleView() {
+  const rows = state.customers;
+  return `${pageHead("Customer", currentRole() === "sales" ? "Customer yang menjadi tanggung jawab kamu." : "Simpan data calon pembeli dan pelanggan.", '<button class="button primary-action" data-modal="customer">+ Tambah customer</button>')}<div class="panel data-panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Nama</th><th>WhatsApp</th><th>Kota</th><th>Sumber</th><th>Aksi</th></tr></thead><tbody>${rows.map((c) => `<tr><td><strong>${esc(c.full_name)}</strong></td><td>${esc(c.phone || "-")}</td><td>${esc(c.city || "-")}</td><td>${esc(c.source || "-")}</td><td><div class="row-actions">${waButton(c.phone, "Hubungi")}<button class="button secondary compact" data-edit-customer="${c.id}">Ubah</button>${currentRole() === "admin" ? "" : `<button class="button danger compact" data-delete-customer="${c.id}">Hapus</button>`}</div></td></tr>`).join("") || '<tr><td colspan="5"><div class="empty">Belum ada customer.</div></td></tr>'}</tbody></table></div>${mobileCards(rows, (c) => `<article class="data-card"><div class="card-top"><div><small>${esc(c.phone || "Tanpa nomor")}</small><h3>${esc(c.full_name)}</h3></div></div><p>${esc(c.city || "Kota belum diisi")} · ${esc(c.source || "Sumber belum diisi")}</p><div class="card-actions">${waButton(c.phone, "Hubungi")}<button class="button secondary compact" data-edit-customer="${c.id}">Ubah</button>${currentRole() === "admin" ? "" : `<button class="button danger compact" data-delete-customer="${c.id}">Hapus</button>`}</div></article>`)}</div>`;
+}
+function leadsRoleView() {
+  const rows=[...state.leads].sort((a,b)=>new Date(a.next_follow_up_at||"2999-01-01")-new Date(b.next_follow_up_at||"2999-01-01"));
+  return `${pageHead("Follow-up", currentRole()==="sales" ? "Kelola customer kamu dan hubungi langsung melalui WhatsApp." : "Kelola calon pembeli dari minat sampai closing.", '<button class="button primary-action" data-modal="lead">+ Tambah follow-up</button>')}<div class="followup-summary"><div><span>Total lead</span><strong>${rows.length}</strong></div><div><span>Perlu ditindaklanjuti</span><strong>${rows.filter((x)=>!["closed","lost"].includes(x.status)).length}</strong></div><div><span>Closing</span><strong>${rows.filter((x)=>x.status==="closed").length}</strong></div></div><div class="panel data-panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Customer</th><th>Kendaraan</th><th>Status</th><th>Follow-up</th><th>Aksi</th></tr></thead><tbody>${rows.map((lead)=>`<tr><td><strong>${esc(lead.customers?.full_name||"Customer")}</strong><br><small>${esc(lead.customers?.phone||"-")}</small></td><td>${esc(lead.vehicles?`${lead.vehicles.brand} ${lead.vehicles.model}`:"Belum memilih kendaraan")}</td><td><span class="status lead-status">${esc(leadDisplayStatus(lead.status))}</span></td><td>${esc(leadDate(lead.next_follow_up_at))}</td><td><div class="row-actions">${waButton(lead.customers?.phone,"Hubungi")}<button class="button secondary compact" data-edit-lead="${lead.id}">Ubah</button>${currentRole()==="admin"?"":`<button class="button danger compact" data-delete-lead="${lead.id}">Hapus</button>`}</div></td></tr>`).join("")||'<tr><td colspan="5"><div class="empty">Belum ada follow-up.</div></td></tr>'}</tbody></table></div>${mobileCards(rows,(lead)=>`<article class="data-card"><div class="card-top"><div><small>${esc(lead.customers?.phone||"Tanpa nomor")}</small><h3>${esc(lead.customers?.full_name||"Customer")}</h3></div><span class="status">${esc(leadDisplayStatus(lead.status))}</span></div><p>${esc(lead.vehicles?`${lead.vehicles.brand} ${lead.vehicles.model}`:"Belum memilih kendaraan")}</p><div class="card-actions">${waButton(lead.customers?.phone,"Hubungi")}<button class="button secondary compact" data-edit-lead="${lead.id}">Ubah</button>${currentRole()==="admin"?"":`<button class="button danger compact" data-delete-lead="${lead.id}">Hapus</button>`}</div></article>`)}</div>`;
+}
+async function teamRequest(action, payload = {}) {
+  const { data, error } = await db.functions.invoke("team-manage", { body: { action, showroom_id: state.showroom.id, ...payload } });
+  if (error) {
+    let message = "Pengelolaan tim belum dapat diproses.";
+    try { const detail = await error.context.json(); message = detail.error || message; } catch {}
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+async function loadTeam() {
+  try { state.team = (await teamRequest("list")).members || []; }
+  catch (error) { state.team = []; toast(error.message, "error"); }
+}
+function teamView() {
+  return `${pageHead("Tim", "Owner membuat akun dan menentukan akses setiap karyawan.", '<button class="button primary-action" data-add-team>+ Tambah tim</button>')}<div class="role-summary"><div><strong>Owner</strong><span>Akses penuh dan pengelola tim</span></div><div><strong>Sales</strong><span>Customer, follow-up, kendaraan, dan penjualan sendiri</span></div><div><strong>Admin Operasional</strong><span>Stok, rekondisi, transaksi, kas, dan laporan</span></div></div><div class="panel data-panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Nama</th><th>Username</th><th>Akses</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${state.team.map((m) => `<tr><td><strong>${esc(m.full_name || "-")}</strong></td><td>${esc(m.username || "-")}</td><td>${roleLabel(m.role)}</td><td><span class="status ${m.is_active ? "paid" : "cancelled"}">${m.is_active ? "Aktif" : "Nonaktif"}</span></td><td><div class="row-actions"><button class="button secondary compact" data-edit-team="${m.user_id}">Ubah</button><button class="button secondary compact" data-reset-team="${m.user_id}">Reset password</button><button class="button ${m.is_active ? "danger" : "secondary"} compact" data-toggle-team="${m.user_id}">${m.is_active ? "Nonaktifkan" : "Aktifkan"}</button></div></td></tr>`).join("") || '<tr><td colspan="5"><div class="empty">Belum ada akun tim.</div></td></tr>'}</tbody></table></div>${mobileCards(state.team, (m) => `<article class="data-card"><div class="card-top"><div><small>@${esc(m.username || "-")}</small><h3>${esc(m.full_name || "-")}</h3></div><span class="status">${roleLabel(m.role)}</span></div><p>${m.is_active ? "Akun aktif" : "Akun dinonaktifkan"}</p><div class="card-actions"><button class="button secondary compact" data-edit-team="${m.user_id}">Ubah</button><button class="button secondary compact" data-reset-team="${m.user_id}">Password</button><button class="button ${m.is_active ? "danger" : "secondary"} compact" data-toggle-team="${m.user_id}">${m.is_active ? "Nonaktifkan" : "Aktifkan"}</button></div></article>`)}</div>`;
+}
+function openTeamModal(member = null, resetOnly = false) {
+  const modal = document.createElement("div");
+  modal.className = "modal-backdrop visible";
+  const isEdit = Boolean(member);
+  const fields = resetOnly
+    ? `<div><label>Password baru</label><input name="password" type="password" minlength="6" required autocomplete="new-password" placeholder="Minimal 6 karakter"></div>`
+    : `<div class="form-grid"><div class="span-2"><label>Nama lengkap</label><input name="full_name" required value="${esc(member?.full_name || "")}"></div>${isEdit ? `<div class="span-2"><label>Username</label><input value="${esc(member.username || "")}" readonly class="readonly"><small>Username tetap agar akses login tidak terputus.</small></div>` : '<div><label>Username</label><input name="username" required pattern="[a-zA-Z0-9._-]{3,32}" placeholder="Contoh: sales.andi"></div><div><label>Password awal</label><input name="password" type="password" minlength="6" required autocomplete="new-password"></div>'}<div class="span-2"><label>Akses</label><select name="role"><option value="sales" ${member?.role === "sales" ? "selected" : ""}>Sales</option><option value="admin" ${member?.role === "admin" ? "selected" : ""}>Admin Operasional</option></select></div></div>`;
+  modal.innerHTML = `<section class="modal"><header class="modal-title"><div><h2>${resetOnly ? "Reset password" : isEdit ? "Ubah anggota tim" : "Tambah anggota tim"}</h2><p>${resetOnly ? `Buat password baru untuk ${esc(member.full_name)}.` : "Akun langsung dapat digunakan setelah disimpan."}</p></div><button type="button" class="modal-close">×</button></header><form class="modal-body">${fields}<footer class="modal-foot"><button type="button" class="button secondary" data-close>Batal</button><button class="button" type="submit">Simpan</button></footer></form></section>`;
+  document.body.append(modal);
+  const close = () => modal.remove();
+  modal.querySelector(".modal-close").onclick = close;
+  modal.querySelector("[data-close]").onclick = close;
+  modal.onclick = (e) => { if (e.target === modal) close(); };
+  modal.querySelector("form").onsubmit = async (e) => {
+    e.preventDefault(); const submit=e.currentTarget.querySelector('[type="submit"]'); submit.disabled=true; submit.textContent="Menyimpan…";
+    const values=Object.fromEntries(new FormData(e.currentTarget));
+    try {
+      if (resetOnly) await teamRequest("reset_password", { user_id: member.user_id, password: values.password });
+      else if (isEdit) await teamRequest("update", { user_id: member.user_id, full_name: values.full_name, role: values.role });
+      else await teamRequest("create", values);
+      close(); await loadTeam(); renderShell(); toast(resetOnly ? "Password berhasil diganti" : "Akun tim berhasil disimpan");
+    } catch(error) { submit.disabled=false; submit.textContent="Simpan"; toast(error.message,"error"); }
+  };
+}
+function renderRolePage() {
+  ensureAllowedView();
+  const page = document.querySelector("#page");
+  const views = { dashboard: roleDashboard, vehicles: currentRole() === "sales" ? () => {
+    const rows=state.vehicles; return `${pageHead("Kendaraan", "Lihat unit yang tersedia dan target harga jual.")}<div class="panel data-panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Unit</th><th>Jenis</th><th>Target jual</th><th>Status</th></tr></thead><tbody>${rows.map((v)=>`<tr><td><strong>${esc(v.brand)} ${esc(v.model)}</strong><br><small>${esc(v.code)} · ${v.year || "-"}</small></td><td>${v.vehicle_type === "car" ? "Mobil" : "Motor"}</td><td>${rupiah(v.target_price)}</td><td>${status(v.status)}</td></tr>`).join("") || '<tr><td colspan="4"><div class="empty">Belum ada kendaraan.</div></td></tr>'}</tbody></table></div></div>`;
+  } : ownerVehiclesView, costs, customers: customersRoleView, leads: leadsRoleView, sales: salesRoleView, finance, reports, team: teamView, settings };
+  page.innerHTML = views[state.view]();
+  if (currentRole() === "admin")
+    page.querySelectorAll("[data-delete-vehicle],[data-delete-cost],[data-delete-sale],[data-delete-transaction],[data-delete-customer]").forEach((el)=>el.remove());
+  if (currentRole() === "sales")
+    page.querySelectorAll("[data-edit-vehicle],[data-delete-vehicle],[data-edit-sale],[data-delete-sale]").forEach((el)=>el.remove());
+  bindPage();
+}
+function renderRoleShell() {
+  ensureAllowedView();
+  const username=state.member?.username || state.session.user.user_metadata?.username || state.session.user.email.split("@")[0];
+  const nav=allowedNavigation();
+  const navItems=nav.map(([id,label])=>`<button data-view="${id}" class="${state.view === id ? "active" : ""}"><span class="material-symbols-rounded">${mobileIcons[id] || "circle"}</span><span class="nav-label">${label}</span></button>`).join("");
+  const primaryIds=currentRole()==="sales" ? ["dashboard","customers","leads","sales"] : ["dashboard","vehicles","sales","finance"];
+  const primary=nav.filter(([id])=>primaryIds.includes(id)).slice(0,3);
+  const addType=currentRole()==="sales" ? "customer" : "vehicle";
+  app.innerHTML=`<div class="shell clean-shell"><aside class="sidebar"><div class="side-brand">${logo()}<div><strong>Bantu Beres</strong><span>Garasi Pro</span></div><button class="sidebar-toggle" data-collapse><span class="material-symbols-rounded">left_panel_close</span></button></div><nav class="nav">${navItems}</nav><div class="sidebar-foot"><div class="account-role"><strong>${esc(username)}</strong><span>${roleLabel()}</span></div><button class="logout-button" data-logout><span class="material-symbols-rounded">logout</span><span class="nav-label">Keluar akun</span></button></div></aside><main class="main"><header class="topbar"><button class="icon-btn mobile-menu-button" data-menu><span class="material-symbols-rounded">menu</span></button><div class="showroom-name"><strong>${esc(state.showroom.name)}</strong><span>${roleLabel()} · ${esc(state.showroom.city || "Lokasi belum diisi")}</span></div><div class="top-actions"><button class="icon-btn" data-refresh><span class="material-symbols-rounded">refresh</span></button><button class="icon-btn" data-theme><span class="material-symbols-rounded">${document.documentElement.dataset.theme === "dark" ? "light_mode" : "dark_mode"}</span></button></div></header><section id="page" class="page"></section></main><nav class="mobile-nav">${primary.map(([id,label])=>`<button data-view="${id}" class="${state.view===id?"active":""}"><span class="material-symbols-rounded">${mobileIcons[id]}</span><span>${label}</span></button>`).join("")}<button class="add-action" data-modal="${addType}"><span class="material-symbols-rounded">add</span><b>Tambah</b></button><button data-menu><span class="material-symbols-rounded">menu</span><span>Menu</span></button></nav><aside class="mobile-drawer"><div class="drawer-brand">${logo()}<div><strong>Bantu Beres</strong><span>Garasi Pro</span></div><button class="icon-btn" data-menu-close><span class="material-symbols-rounded">close</span></button></div><div class="drawer-account"><small>${esc(username)}</small><strong>${esc(state.showroom.name)}</strong><span>${roleLabel()}</span></div><nav>${navItems}</nav><button class="drawer-logout" data-logout><span class="material-symbols-rounded">logout</span>Keluar akun</button></aside><div class="drawer-shade" data-menu-close></div></div>`;
+  const shell=app.querySelector(".shell"), close=()=>{shell.classList.remove("drawer-open");document.body.classList.remove("no-scroll")};
+  app.querySelectorAll("[data-view]").forEach((b)=>b.onclick=()=>{state.view=b.dataset.view;close();renderShell()});
+  app.querySelectorAll("[data-menu]").forEach((b)=>b.onclick=()=>{shell.classList.add("drawer-open");document.body.classList.add("no-scroll")});
+  app.querySelectorAll("[data-menu-close]").forEach((b)=>b.onclick=close);
+  app.querySelectorAll("[data-logout]").forEach((b)=>b.onclick=async()=>{await db.auth.signOut();state={...state,session:null,showroom:null,member:null,team:[]};renderAuth()});
+  app.querySelector("[data-refresh]").onclick=async()=>{await loadData();renderPage();toast("Data berhasil diperbarui")};
+  app.querySelector("[data-theme]").onclick=()=>{setTheme(document.documentElement.dataset.theme==="dark"?"light":"dark");renderShell()};
+  app.querySelector("[data-collapse]").onclick=()=>{shell.classList.toggle("sidebar-collapsed");localStorage.setItem("garasi-sidebar",shell.classList.contains("sidebar-collapsed")?"1":"0")};
+  if(localStorage.getItem("garasi-sidebar")==="1") shell.classList.add("sidebar-collapsed");
+  renderPage();
+}
+bindPage = function () {
+  baseBindPageForRoles();
+  document.querySelectorAll("[data-wa-phone]").forEach((b)=>b.onclick=()=>window.open(waLink(b.dataset.waPhone),"_blank","noopener"));
+  document.querySelector("[data-add-team]")?.addEventListener("click",()=>openTeamModal());
+  document.querySelectorAll("[data-edit-team]").forEach((b)=>b.onclick=()=>openTeamModal(state.team.find((m)=>m.user_id===b.dataset.editTeam)));
+  document.querySelectorAll("[data-reset-team]").forEach((b)=>b.onclick=()=>openTeamModal(state.team.find((m)=>m.user_id===b.dataset.resetTeam),true));
+  document.querySelectorAll("[data-toggle-team]").forEach((b)=>b.onclick=()=>{const m=state.team.find((x)=>x.user_id===b.dataset.toggleTeam);confirmAction(m.is_active?"Nonaktifkan akun?":"Aktifkan akun?",m.is_active?"Akun langsung kehilangan akses ke data showroom.":"Akun dapat kembali masuk menggunakan username dan passwordnya.",async()=>{try{await teamRequest("set_active",{user_id:m.user_id,is_active:!m.is_active});await loadTeam();renderShell();toast(`Akun ${m.is_active?"dinonaktifkan":"diaktifkan"}`)}catch(error){toast(error.message,"error")}})});
+};
+renderPage = renderRolePage;
+renderShell = renderRoleShell;

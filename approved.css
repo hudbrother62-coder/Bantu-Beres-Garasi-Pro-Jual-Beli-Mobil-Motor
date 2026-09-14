@@ -2,6 +2,25 @@
 .clean-shell {
   min-height: 100dvh;
 }
+
+/* Team and role access */
+.account-role { display:flex; flex-direction:column; min-width:0; padding:8px 10px; }
+.account-role strong { overflow:hidden; text-overflow:ellipsis; }
+.account-role span, .team-row span, .role-summary span, .muted { color:var(--muted); font-size:12px; }
+.role-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+.role-summary > div { padding:16px; border:1px solid var(--line); border-radius:var(--radius,14px); background:var(--surface,#fff); display:flex; flex-direction:column; gap:5px; }
+.team-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:13px 0; border-bottom:1px solid var(--line); }
+.team-row:last-child { border-bottom:0; }
+.team-row > div { display:flex; flex-direction:column; gap:3px; }
+.button.whatsapp { background:#157347; border-color:#157347; color:#fff; text-decoration:none; display:inline-flex; align-items:center; gap:5px; }
+.button.whatsapp:hover { background:#105c39; }
+.button.whatsapp .material-symbols-rounded { font-size:17px; }
+
+@media (max-width:760px) {
+  .role-summary { grid-template-columns:1fr; }
+  .role-summary > div { padding:13px 14px; }
+  .team-row { align-items:flex-start; }
+}
 .clean-shell .sidebar {
   transition: width 0.22s ease;
 }
