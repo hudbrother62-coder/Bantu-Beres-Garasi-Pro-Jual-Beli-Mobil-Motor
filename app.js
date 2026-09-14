@@ -80,6 +80,7 @@ let state = {
   sales: [],
   accounts: [],
   transactions: [],
+  photos: [],
 };
 const rupiah = (n) =>
   new Intl.NumberFormat("id-ID", {
@@ -128,7 +129,7 @@ async function loadShowroom() {
 }
 async function loadData() {
   const id = state.showroom.id;
-  const [v, c, cu, l, s, a, t] = await Promise.all([
+  const [v, c, cu, l, s, a, t, ph] = await Promise.all([
     db
       .from("vehicles")
       .select("*")
@@ -156,6 +157,11 @@ async function loadData() {
       .select("*")
       .eq("showroom_id", id)
       .order("transaction_date", { ascending: false }),
+    db
+      .from("vehicle_photos")
+      .select("*")
+      .eq("showroom_id", id)
+      .order("sort_order"),
   ]);
   Object.assign(state, {
     vehicles: v.data || [],
@@ -165,6 +171,7 @@ async function loadData() {
     sales: s.data || [],
     accounts: a.data || [],
     transactions: t.data || [],
+    photos: ph.data || [],
   });
 }
 function renderAuth() {
@@ -273,13 +280,11 @@ async function setupShowroom(e) {
     .select()
     .single();
   if (error) return toast(error.message);
-  const r = await db
-    .from("showroom_members")
-    .insert({
-      showroom_id: data.id,
-      user_id: state.session.user.id,
-      role: "owner",
-    });
+  const r = await db.from("showroom_members").insert({
+    showroom_id: data.id,
+    user_id: state.session.user.id,
+    role: "owner",
+  });
   if (r.error) return toast(r.error.message);
   await db
     .from("cash_accounts")
@@ -454,7 +459,7 @@ function reports() {
   return `${pageHead("Laporan", "Ringkasan yang siap diekspor atau dicetak.")}<div class="dashboard-grid"><section class="panel"><h2>Laporan Stok</h2><p class="sub">${inStock.length} kendaraan masih tersedia.</p><button class="button secondary" data-print="stock">Cetak laporan stok</button></section><section class="panel"><h2>Laporan Penjualan</h2><p class="sub">${state.sales.length} transaksi penjualan tercatat.</p><button class="button secondary" data-print="sales">Cetak laporan penjualan</button></section><section class="panel"><h2>Laporan Piutang</h2><p class="sub">${state.sales.filter((s) => s.payment_status !== "paid").length} transaksi belum lunas.</p><button class="button secondary" data-print="receivable">Cetak laporan piutang</button></section><section class="panel"><h2>Catatan</h2><p class="sub">Cetak memakai data akun showroom yang sedang aktif.</p></section></div>`;
 }
 function settings() {
-  return `${pageHead("Pengaturan Showroom", "Identitas showroom dan jenis usaha akun ini.", '<button class="button primary-action" id="saveSettings">Simpan perubahan</button>')}<div class="panel"><div class="form-grid"><div class="span-2"><label>Nama showroom</label><input id="setName" value="${esc(state.showroom.name)}"></div><div><label>Kota</label><input id="setCity" value="${esc(state.showroom.city || "")}"></div><div><label>WhatsApp</label><input id="setPhone" value="${esc(state.showroom.phone || "")}"></div><div><label>Jenis usaha</label><select id="setType"><option value="car" ${state.showroom.business_type === "car" ? "selected" : ""}>Showroom Mobil</option><option value="motorcycle" ${state.showroom.business_type === "motorcycle" ? "selected" : ""}>Showroom Motor</option><option value="both" ${state.showroom.business_type === "both" ? "selected" : ""}>Mobil + Motor</option></select></div><div><label>Alamat</label><input id="setAddress" value="${esc(state.showroom.address || "")}"></div></div></div>`;
+  return `${pageHead("Profil Showroom", "Informasi usaha yang digunakan pada laporan dan data showroom.", '<button class="button primary-action" id="saveSettings">Simpan perubahan</button>')}<div class="panel showroom-profile"><div class="form-grid"><div class="span-2"><label>Nama showroom</label><input id="setName" value="${esc(state.showroom.name)}"></div><div><label>Nama pemilik / penanggung jawab</label><input id="setOwner" value="${esc(state.showroom.owner_name || "")}"></div><div><label>Jenis usaha</label><select id="setType"><option value="car" ${state.showroom.business_type === "car" ? "selected" : ""}>Showroom Mobil</option><option value="motorcycle" ${state.showroom.business_type === "motorcycle" ? "selected" : ""}>Showroom Motor</option><option value="both" ${state.showroom.business_type === "both" ? "selected" : ""}>Mobil + Motor</option></select></div><div><label>Kota / kabupaten</label><input id="setCity" value="${esc(state.showroom.city || "")}"></div><div><label>Nomor telepon</label><input id="setPhone" value="${esc(state.showroom.phone || "")}"></div><div><label>WhatsApp</label><input id="setWhatsapp" value="${esc(state.showroom.whatsapp || state.showroom.phone || "")}"></div><div><label>Email kontak (opsional)</label><input id="setEmail" value="${esc(state.showroom.contact_email || "")}"></div><div class="span-2"><label>Alamat lengkap</label><textarea id="setAddress">${esc(state.showroom.address || "")}</textarea></div><div><label>Jam operasional</label><input id="setHours" value="${esc(state.showroom.opening_hours || "")}" placeholder="Senin–Sabtu, 08.00–17.00"></div><div class="span-2"><label>Keterangan showroom</label><textarea id="setDescription" placeholder="Layanan, spesialisasi kendaraan, atau informasi penting lainnya">${esc(state.showroom.description || "")}</textarea></div></div></div>`;
 }
 function bindPage() {
   document
@@ -546,7 +551,11 @@ function openModal(type, data = {}) {
 }
 async function saveForm(e, type, id, modal) {
   e.preventDefault();
-  const raw = Object.fromEntries(new FormData(e.currentTarget));
+  const formData = new FormData(e.currentTarget);
+  const photoFiles =
+    type === "vehicle" ? formData.getAll("photos").filter((f) => f?.size) : [];
+  const raw = Object.fromEntries(formData);
+  delete raw.photos;
   Object.keys(raw).forEach((k) => {
     if (raw[k] === "") raw[k] = null;
   });
@@ -581,8 +590,45 @@ async function saveForm(e, type, id, modal) {
   const request = id
     ? db.from(table).update(raw).eq("id", id)
     : db.from(table).insert(raw);
-  const { error } = await request.select();
+  const { data: savedRows, error } = await request.select();
   if (error) return toast(error.message, "error");
+  if (type === "vehicle" && photoFiles.length) {
+    const vehicleId = id || savedRows?.[0]?.id;
+    const existingCount = state.photos.filter(
+      (p) => p.vehicle_id === vehicleId,
+    ).length;
+    for (let index = 0; index < photoFiles.length; index++) {
+      const file = photoFiles[index];
+      if (file.size > 5 * 1024 * 1024)
+        return toast(`${file.name} melebihi 5 MB`, "error");
+      const extension = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `${state.showroom.id}/${vehicleId}/${crypto.randomUUID()}.${extension}`;
+      const { error: uploadError } = await db.storage
+        .from("vehicle-photos")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (uploadError) return toast(uploadError.message, "error");
+      const { data: publicData } = db.storage
+        .from("vehicle-photos")
+        .getPublicUrl(path);
+      const isPrimary = existingCount === 0 && index === 0;
+      const { error: photoError } = await db
+        .from("vehicle_photos")
+        .insert({
+          showroom_id: state.showroom.id,
+          vehicle_id: vehicleId,
+          storage_path: path,
+          public_url: publicData.publicUrl,
+          is_primary: isPrimary,
+          sort_order: existingCount + index,
+        });
+      if (photoError) return toast(photoError.message, "error");
+      if (isPrimary)
+        await db
+          .from("vehicles")
+          .update({ cover_url: publicData.publicUrl })
+          .eq("id", vehicleId);
+    }
+  }
   modal.remove();
   await loadData();
   renderShell();
@@ -595,6 +641,11 @@ async function saveSettings() {
     phone: document.querySelector("#setPhone").value,
     address: document.querySelector("#setAddress").value,
     business_type: document.querySelector("#setType").value,
+    owner_name: document.querySelector("#setOwner").value,
+    whatsapp: document.querySelector("#setWhatsapp").value,
+    contact_email: document.querySelector("#setEmail").value,
+    opening_hours: document.querySelector("#setHours").value,
+    description: document.querySelector("#setDescription").value,
   };
   const { data, error } = await db
     .from("showrooms")
@@ -621,6 +672,105 @@ db.auth.onAuthStateChange((_event, session) => {
   }
 });
 init();
+
+/* Approved mobile-first shell: one navigation source, left drawer, five bottom actions. */
+dashboard = function () {
+  const stock = state.vehicles.filter(
+    (v) => !["sold", "delivered", "cancelled"].includes(v.status),
+  );
+  const capital = stock.reduce((sum, v) => sum + vehicleHpp(v), 0);
+  const income = state.transactions
+    .filter((t) => t.flow === "income")
+    .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const expense = state.transactions
+    .filter((t) => t.flow === "expense")
+    .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const unpaid = state.sales.filter((s) => s.payment_status !== "paid");
+  const old = stock.filter(
+    (v) =>
+      v.purchase_date && (Date.now() - new Date(v.purchase_date)) / 864e5 > 90,
+  );
+  return `${pageHead("Dashboard", "Ringkasan showroom dan aktivitas terbaru.")}
+    <section class="hero-summary"><div><span>Nilai stok aktif</span><strong>${rupiah(capital)}</strong><small>${stock.length} kendaraan tersedia</small></div><span class="material-symbols-rounded">garage_home</span></section>
+    <div class="metric-grid dashboard-metrics"><article class="metric"><div class="label">UNIT TERJUAL</div><div class="value">${state.sales.length}</div><div class="meta">Seluruh periode</div></article><article class="metric"><div class="label">SALDO KAS</div><div class="value up">${rupiah(income - expense)}</div><div class="meta">Arus kas tercatat</div></article><article class="metric"><div class="label">PIUTANG</div><div class="value warn">${unpaid.length}</div><div class="meta">Belum lunas</div></article><article class="metric"><div class="label">REKONDISI</div><div class="value">${rupiah(state.costs.reduce((a, c) => a + Number(c.amount || 0), 0))}</div><div class="meta">Total biaya</div></article></div>
+    <div class="dashboard-grid"><section class="panel"><div class="section-title"><div><h2>Perlu diperiksa</h2><p class="sub">Catatan operasional utama</p></div></div><div class="action-list">${old.length ? `<div class="action"><i class="dot bad"></i><div><strong>${old.length} stok lebih dari 90 hari</strong><p>Periksa harga dan kondisi unit.</p></div></div>` : ""}${unpaid.length ? `<div class="action"><i class="dot warn"></i><div><strong>${unpaid.length} pembayaran belum lunas</strong><p>Periksa sisa pembayaran customer.</p></div></div>` : ""}${!old.length && !unpaid.length ? '<div class="action"><i class="dot ok"></i><div><strong>Tidak ada peringatan</strong><p>Data operasional saat ini aman.</p></div></div>' : ""}</div></section><section class="panel"><div class="section-title"><div><h2>Kendaraan terbaru</h2><p class="sub">Unit terakhir yang dicatat</p></div><button class="text-button" data-view="vehicles">Lihat semua</button></div><div class="latest-stock">${stock.slice(0, 4).map(vehiclePreview).join("") || '<div class="empty">Belum ada kendaraan.</div>'}</div></section></div>`;
+};
+
+function vehiclePreview(v) {
+  const photo =
+    state.photos.find((p) => p.vehicle_id === v.id && p.is_primary) ||
+    state.photos.find((p) => p.vehicle_id === v.id);
+  return `<button class="stock-preview" data-edit-vehicle="${v.id}"><span class="vehicle-thumb">${photo?.public_url || v.cover_url ? `<img src="${esc(photo?.public_url || v.cover_url)}" alt="${esc(v.brand)} ${esc(v.model)}">` : '<span class="material-symbols-rounded">directions_car</span>'}</span><span><strong>${esc(v.brand)} ${esc(v.model)}</strong><small>${esc(v.code)} · ${v.year || "-"}</small></span>${status(v.status)}<span class="material-symbols-rounded chevron">chevron_right</span></button>`;
+}
+
+function renderShellApproved() {
+  const username =
+    state.session.user.user_metadata?.username ||
+    state.session.user.email.split("@")[0];
+  const business =
+    state.showroom.business_type === "both"
+      ? "Mobil & Motor"
+      : state.showroom.business_type === "car"
+        ? "Mobil"
+        : "Motor";
+  const navItems = navV2
+    .map(
+      ([id, n]) =>
+        `<button data-view="${id}" class="${state.view === id ? "active" : ""}"><span class="material-symbols-rounded">${mobileIcons[id]}</span><span class="nav-label">${n}</span></button>`,
+    )
+    .join("");
+  app.innerHTML = `<div class="shell clean-shell"><aside class="sidebar"><div class="side-brand">${logo()}<div><strong>Bantu Beres</strong><span>Garasi Pro</span></div><button class="sidebar-toggle" data-collapse aria-label="Sembunyikan menu"><span class="material-symbols-rounded">left_panel_close</span></button></div><nav class="nav">${navItems}</nav><div class="sidebar-foot"><div class="user-chip">${esc(username)}</div><button class="logout-button" data-logout><span class="material-symbols-rounded">logout</span><span class="nav-label">Keluar akun</span></button></div></aside><main class="main"><header class="topbar"><button class="icon-btn mobile-menu-button" data-menu aria-label="Buka menu"><span class="material-symbols-rounded">menu</span></button><div class="showroom-name"><strong>${esc(state.showroom.name)}</strong><span>Showroom ${business} · ${esc(state.showroom.city || "Lokasi belum diisi")}</span></div><div class="top-actions"><button class="icon-btn" data-refresh aria-label="Muat ulang"><span class="material-symbols-rounded">refresh</span></button><button class="icon-btn" data-theme aria-label="Ganti tema"><span class="material-symbols-rounded">${document.documentElement.dataset.theme === "dark" ? "light_mode" : "dark_mode"}</span></button></div></header><section id="page" class="page"></section></main><nav class="mobile-nav"><button data-view="dashboard" class="${state.view === "dashboard" ? "active" : ""}"><span class="material-symbols-rounded">dashboard</span><span>Dashboard</span></button><button data-view="vehicles" class="${state.view === "vehicles" ? "active" : ""}"><span class="material-symbols-rounded">directions_car</span><span>Stok</span></button><button class="add-action" data-modal="vehicle"><span class="material-symbols-rounded">add</span><b>Tambah</b></button><button data-view="sales" class="${state.view === "sales" ? "active" : ""}"><span class="material-symbols-rounded">receipt_long</span><span>Penjualan</span></button><button data-menu><span class="material-symbols-rounded">menu</span><span>Menu</span></button></nav><aside class="mobile-drawer"><div class="drawer-brand">${logo()}<div><strong>Bantu Beres</strong><span>Garasi Pro</span></div><button class="icon-btn" data-menu-close><span class="material-symbols-rounded">close</span></button></div><div class="drawer-account"><small>${esc(username)}</small><strong>${esc(state.showroom.name)}</strong><span>Showroom ${business}</span></div><nav>${navItems}</nav><button class="drawer-logout" data-logout><span class="material-symbols-rounded">logout</span>Keluar akun</button></aside><div class="drawer-shade" data-menu-close></div></div>`;
+  const shell = app.querySelector(".shell");
+  const close = () => {
+    shell.classList.remove("drawer-open");
+    document.body.classList.remove("no-scroll");
+  };
+  app.querySelectorAll("[data-view]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        state.view = b.dataset.view;
+        close();
+        renderShell();
+      }),
+  );
+  app.querySelectorAll("[data-menu]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        shell.classList.add("drawer-open");
+        document.body.classList.add("no-scroll");
+      }),
+  );
+  app.querySelectorAll("[data-menu-close]").forEach((b) => (b.onclick = close));
+  app.querySelectorAll("[data-logout]").forEach(
+    (b) =>
+      (b.onclick = async () => {
+        await db.auth.signOut();
+        state.session = null;
+        renderAuth();
+      }),
+  );
+  app.querySelector("[data-refresh]").onclick = async () => {
+    await loadData();
+    renderPage();
+    toast("Data berhasil diperbarui");
+  };
+  app.querySelector("[data-theme]").onclick = () => {
+    setTheme(
+      document.documentElement.dataset.theme === "dark" ? "light" : "dark",
+    );
+    renderShell();
+  };
+  app.querySelector("[data-collapse]").onclick = () => {
+    shell.classList.toggle("sidebar-collapsed");
+    localStorage.setItem(
+      "garasi-sidebar",
+      shell.classList.contains("sidebar-collapsed") ? "1" : "0",
+    );
+  };
+  if (localStorage.getItem("garasi-sidebar") === "1")
+    shell.classList.add("sidebar-collapsed");
+  renderPage();
+}
 
 /* Garasi Pro UX v2 — mobile, theme, accounting and reversible transactions */
 const today = () => new Date().toISOString().slice(0, 10);
@@ -976,7 +1126,7 @@ function openModalV2(type, data = {}) {
       ],
       data.status || "inspection",
       false,
-    )}<div class="span-2"><label>Catatan</label><textarea name="description">${esc(data.description || "")}</textarea></div></div>`;
+    )}<div class="span-2"><label>Foto kendaraan</label><input type="file" name="photos" accept="image/jpeg,image/png,image/webp" multiple><small>Maksimal 5 MB per foto. Foto pertama menjadi sampul.</small>${data.id ? photoManager(data.id) : ""}</div><div class="span-2"><label>Catatan</label><textarea name="description">${esc(data.description || "")}</textarea></div></div>`;
   }
   if (type === "sale") {
     title = data.id ? "Ubah penjualan" : "Catat penjualan";
@@ -1067,3 +1217,12 @@ function openModalV2(type, data = {}) {
     }
   };
 }
+
+function photoManager(vehicleId) {
+  const rows = state.photos.filter((p) => p.vehicle_id === vehicleId);
+  return rows.length
+    ? `<div class="photo-grid">${rows.map((p) => `<figure><img src="${esc(p.public_url)}" alt="Foto kendaraan"><figcaption>${p.is_primary ? "Sampul" : "Foto tambahan"} <button type="button" data-delete-photo="${p.id}" data-path="${esc(p.storage_path)}">Hapus</button></figcaption></figure>`).join("")}</div>`
+    : "";
+}
+
+renderShell = renderShellApproved;
