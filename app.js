@@ -1,81 +1,1069 @@
-const SUPABASE_URL = 'https://enmbebmcjenngzjcnbma.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_NCTMqAr8tJ6bswIJQclCbA_HU96WUA5';
+const SUPABASE_URL = "https://enmbebmcjenngzjcnbma.supabase.co";
+const SUPABASE_KEY = "sb_publishable_NCTMqAr8tJ6bswIJQclCbA_HU96WUA5";
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-const app = document.querySelector('#app');
-const mobileIcons={dashboard:'home',vehicles:'directions_car',sales:'receipt_long',finance:'account_balance_wallet',costs:'build',customers:'group',leads:'follow_the_signs',reports:'bar_chart',settings:'settings'};
-function renderShellMobileV3(){const user=state.session.user.user_metadata?.username||state.session.user.email.split('@')[0],business=state.showroom.business_type==='both'?'Mobil & Motor':state.showroom.business_type==='car'?'Mobil':'Motor';app.innerHTML=`<div class="shell shell-v3"><aside class="sidebar"><div class="side-brand">${logo()}<div><strong>Garasi Pro</strong><span>Bantu Beres</span></div></div><nav class="nav">${navV2.map(([id,n])=>`<button data-view="${id}" class="${state.view===id?'active':''}"><span class="material-symbols-rounded">${mobileIcons[id]}</span>${n}</button>`).join('')}</nav><div class="sidebar-foot"><div class="user-chip">${esc(user)}</div><button class="logout-button" data-logout>Keluar akun</button></div></aside><main class="main"><header class="topbar"><div class="mobile-brand">${logo()}<div><strong>${esc(state.showroom.name)}</strong><span>Showroom ${business}</span></div></div><div class="showroom-name">${esc(state.showroom.name)}<span>Showroom ${business} · ${esc(state.showroom.city||'Belum ada kota')}</span></div><div class="top-actions"><button class="icon-btn desktop-refresh" data-refresh aria-label="Muat ulang"><span class="material-symbols-rounded">refresh</span></button><button class="icon-btn" data-theme aria-label="Ganti tema"><span class="material-symbols-rounded">${document.documentElement.dataset.theme==='dark'?'light_mode':'dark_mode'}</span></button><button class="icon-btn mobile-menu-button" data-menu aria-label="Buka menu"><span class="material-symbols-rounded">menu</span></button></div></header><section id="page" class="page"></section></main><nav class="mobile-nav">${navV2.slice(0,4).map(([id,n])=>`<button data-view="${id}" class="${state.view===id?'active':''}"><span class="material-symbols-rounded">${mobileIcons[id]}</span><span>${n}</span></button>`).join('')}</nav><aside class="mobile-drawer" aria-hidden="true"><div class="drawer-brand">${logo()}<div><strong>Bantu Beres</strong><span>Garasi Pro</span></div><button class="icon-btn" data-menu-close aria-label="Tutup menu"><span class="material-symbols-rounded">close</span></button></div><div class="drawer-account"><small>Akun showroom</small><strong>${esc(state.showroom.name)}</strong><span>${esc(user)}</span></div><nav>${navV2.map(([id,n])=>`<button data-view="${id}" class="${state.view===id?'active':''}"><span class="material-symbols-rounded">${mobileIcons[id]}</span>${n}</button>`).join('')}</nav><button class="drawer-logout" data-logout><span class="material-symbols-rounded">logout</span> Keluar akun</button></aside><div class="drawer-shade" data-menu-close></div></div>`;document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>gotoView(b.dataset.view));document.querySelectorAll('[data-logout]').forEach(b=>b.onclick=async()=>{await db.auth.signOut();state={...state,session:null,showroom:null};renderAuth()});document.querySelector('[data-refresh]').onclick=async()=>{await loadData();renderPage();toast('Data berhasil diperbarui')};document.querySelector('[data-theme]').onclick=()=>{setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');renderShellMobileV3()};const shell=document.querySelector('.shell'),open=()=>{shell.classList.add('drawer-open');document.body.classList.add('no-scroll')},close=()=>{shell.classList.remove('drawer-open');document.body.classList.remove('no-scroll')};document.querySelector('[data-menu]').onclick=open;document.querySelectorAll('[data-menu-close]').forEach(x=>x.onclick=close);renderPage()}
-setTimeout(()=>{renderShell=renderShellMobileV3},0);
-let state={session:null,showroom:null,view:'dashboard',vehicles:[],costs:[],customers:[],leads:[],sales:[],accounts:[],transactions:[]};
-const rupiah=n=>new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(Number(n||0));
-const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-const mark=()=>'<span class="brand-mark logo-bantuberes" role="img" aria-label="BantuBeres"></span>';
-function toast(msg){const el=document.querySelector('#toast');el.textContent=msg;el.classList.add('toast-show');setTimeout(()=>el.classList.remove('toast-show'),3200)}
-function status(s){return `<span class="status ${String(s).replaceAll(' ','_')}">${esc(String(s).replaceAll('_',' '))}</span>`}
-async function init(){const {data:{session}}=await db.auth.getSession();state.session=session;if(!session)return renderAuth();await loadShowroom();}
-async function loadShowroom(){const {data,error}=await db.from('showrooms').select('*').eq('owner_id',state.session.user.id).limit(1);if(error)return toast(error.message);state.showroom=data?.[0];if(!state.showroom)return renderOnboarding();await loadData();renderShell();}
-async function loadData(){const id=state.showroom.id;const [v,c,cu,l,s,a,t]=await Promise.all([db.from('vehicles').select('*').eq('showroom_id',id).order('created_at',{ascending:false}),db.from('vehicle_costs').select('*').eq('showroom_id',id),db.from('customers').select('*').eq('showroom_id',id).order('created_at',{ascending:false}),db.from('leads').select('*, customers(full_name), vehicles(brand,model,year)').eq('showroom_id',id).order('created_at',{ascending:false}),db.from('sales').select('*, vehicles(brand,model,year), customers(full_name)').eq('showroom_id',id).order('sale_date',{ascending:false}),db.from('cash_accounts').select('*').eq('showroom_id',id),db.from('cash_transactions').select('*').eq('showroom_id',id).order('transaction_date',{ascending:false})]);Object.assign(state,{vehicles:v.data||[],costs:c.data||[],customers:cu.data||[],leads:l.data||[],sales:s.data||[],accounts:a.data||[],transactions:t.data||[]});}
-function renderAuth(){app.innerHTML=`<main class="auth"><section class="auth-card"><div class="brand">${mark()}<span>Bantu Beres Garasi Pro</span></div><h1>Kelola showroom lebih jelas.</h1><p>Catat mobil atau motor, hitung modal sebenarnya, dan pantau penjualan per unit.</p><div class="tabs"><button class="active" data-auth="login">Masuk</button><button data-auth="register">Daftar</button></div><form id="authForm"><label>Username</label><input name="username" required autocomplete="username" placeholder="Contoh: garasimaju"><label>Kata sandi</label><input type="password" name="password" required autocomplete="current-password" minlength="6" placeholder="Minimal 6 karakter"><button class="button full">Masuk ke aplikasi</button></form><p class="hint">Tidak memerlukan email aktif. Setiap showroom memiliki ruang data sendiri.</p></section></main>`;document.querySelectorAll('[data-auth]').forEach(b=>b.onclick=()=>switchAuth(b.dataset.auth));document.querySelector('#authForm').onsubmit=authSubmit;}
-function switchAuth(mode){document.querySelectorAll('[data-auth]').forEach(b=>b.classList.toggle('active',b.dataset.auth===mode));document.querySelector('#authForm').innerHTML=`${mode==='register'?'<label>Nama lengkap</label><input name="name" required autocomplete="name" placeholder="Nama pemilik showroom">':''}<label>Username</label><input name="username" required autocomplete="username" placeholder="Contoh: garasimaju"><label>Kata sandi</label><input type="password" name="password" required autocomplete="${mode==='register'?'new-password':'current-password'}" minlength="6" placeholder="Minimal 6 karakter"><button class="button full">${mode==='register'?'Buat akun':'Masuk ke aplikasi'}</button>`;document.querySelector('#authForm').dataset.mode=mode;}
-function loginIdentity(value){const raw=String(value||'').trim().toLowerCase();if(raw.includes('@'))return raw;return/^[a-z0-9._-]{3,32}$/.test(raw)?`${raw}@login.garasipro.local`:null;}
-async function registerUsernameAccount(username,password,fullName){const {data,error}=await db.functions.invoke('account-signup',{body:{username,password,full_name:fullName}});if(!error)return{data};let message='Pendaftaran belum dapat diproses. Coba lagi.';try{const detail=await error.context.json();message=detail.error||message}catch{}return{error:{message}};}
-async function authSubmit(e){e.preventDefault();const form=e.currentTarget,f=new FormData(form),username=f.get('username'),email=loginIdentity(username),password=f.get('password'),register=form.dataset.mode==='register';if(!email)return toast('Username gunakan 3–32 karakter: huruf, angka, titik, garis bawah, atau strip.');const submit=form.querySelector('button[type="submit"],button:not([type])');submit.disabled=true;submit.textContent=register?'Membuat akun...':'Memeriksa akun...';const r=register?await registerUsernameAccount(String(username).trim(),password,f.get('name')):await db.auth.signInWithPassword({email,password});if(r.error){submit.disabled=false;submit.textContent=register?'Buat akun':'Masuk ke aplikasi';return toast(r.error.message)}const login=register?await db.auth.signInWithPassword({email,password}):r;if(login.error||!login.data.session){submit.disabled=false;submit.textContent=register?'Buat akun':'Masuk ke aplikasi';return toast(login.error?.message||'Sesi akun belum terbentuk. Coba masuk kembali.')}state.session=login.data.session;await loadShowroom();}
-function renderOnboarding(){app.innerHTML=`<main class="auth"><section class="onboarding"><div class="brand">${mark()}<span>Bantu Beres Garasi Pro</span></div><h1>Siapkan showroom kamu</h1><p>Jenis usaha menentukan formulir kendaraan, kategori biaya, katalog, dan laporan akun ini.</p><div class="panel"><form id="setupForm"><label>Nama showroom</label><input name="name" required placeholder="Contoh: Garasi Maju Jaya"><div class="form-grid"><div><label>Kota</label><input name="city" placeholder="Contoh: Malang"></div><div><label>Nomor WhatsApp</label><input name="phone" placeholder="08xxxxxxxxxx"></div></div><label>Jenis usaha</label><div class="choice-grid" id="typeChoices"><button type="button" class="choice selected" data-type="car"><strong>Showroom Mobil</strong><span>Kelola stok dan penjualan mobil.</span></button><button type="button" class="choice" data-type="motorcycle"><strong>Showroom Motor</strong><span>Kelola stok dan penjualan motor.</span></button><button type="button" class="choice" data-type="both"><strong>Mobil + Motor</strong><span>Gunakan dua kategori kendaraan.</span></button></div><input type="hidden" name="business_type" value="car"><button class="button full">Buat ruang showroom</button></form></div></section></main>`;document.querySelectorAll('[data-type]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-type]').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');document.querySelector('[name=business_type]').value=b.dataset.type});document.querySelector('#setupForm').onsubmit=setupShowroom;}
-async function setupShowroom(e){e.preventDefault();const f=new FormData(e.currentTarget),row={owner_id:state.session.user.id,name:f.get('name'),city:f.get('city'),phone:f.get('phone'),business_type:f.get('business_type')};const {data,error}=await db.from('showrooms').insert(row).select().single();if(error)return toast(error.message);const r=await db.from('showroom_members').insert({showroom_id:data.id,user_id:state.session.user.id,role:'owner'});if(r.error)return toast(r.error.message);await db.from('cash_accounts').insert({showroom_id:data.id,name:'Kas Utama',account_type:'cash'});state.showroom=data;await loadData();renderShell();toast('Showroom berhasil dibuat');}
-const nav=[['dashboard','Dashboard'],['vehicles','Kendaraan'],['costs','Rekondisi'],['customers','Customer'],['leads','Lead & Follow-up'],['sales','Penjualan'],['finance','Keuangan'],['reports','Laporan'],['settings','Pengaturan']];
-function renderShell(){app.innerHTML=`<div class="shell"><aside class="sidebar"><div class="brand">${mark()}<span>Garasi Pro</span></div><div class="side-section">Operasional</div><nav class="nav">${nav.map(([id,n])=>`<button data-view="${id}" class="${state.view===id?'active':''}">${n}</button>`).join('')}</nav><div class="sidebar-foot"><div class="user-chip">${esc(state.session.user.user_metadata?.username||state.session.user.email)}</div><button id="logout" class="nav">Keluar akun</button></div></aside><main class="main"><header class="topbar"><div class="showroom-name">${esc(state.showroom.name)}<span>${state.showroom.business_type==='both'?'Mobil & Motor':state.showroom.business_type==='car'?'Showroom Mobil':'Showroom Motor'} · ${esc(state.showroom.city||'Belum ada kota')}</span></div><div class="top-actions"><button class="icon-btn" id="refresh" title="Muat ulang">↻</button><button class="icon-btn" id="theme" title="Tampilan">◐</button></div></header><section id="page" class="page"></section></main></div>`;document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;renderShell()});document.querySelector('#logout').onclick=async()=>{await db.auth.signOut();state={...state,session:null,showroom:null};renderAuth()};document.querySelector('#refresh').onclick=async()=>{await loadData();renderPage();toast('Data diperbarui')};renderPage();}
-function pageHead(title,desc,button=''){return `<div class="page-head"><div><h1>${title}</h1><p>${desc}</p></div>${button}</div>`}
-function renderPage(){const p=document.querySelector('#page');const m={dashboard:dashboard,vehicles:vehicles,costs:costs,customers:customers,leads:leads,sales:sales,finance:finance,reports:reports,settings:settings};p.innerHTML=m[state.view]();bindPage();}
-function dashboard(){const inStock=state.vehicles.filter(v=>!['sold','delivered','cancelled'].includes(v.status));const hpp=v=>Number(v.purchase_price)+state.costs.filter(c=>c.vehicle_id===v.id).reduce((a,c)=>a+Number(c.amount),0);const capital=inStock.reduce((a,v)=>a+hpp(v),0);const profit=state.sales.reduce((a,s)=>{const v=state.vehicles.find(x=>x.id===s.vehicle_id);return a+Number(s.sale_price)-Number(s.discount)-Number(s.commission)-(v?hpp(v):0)},0);const old=inStock.filter(v=>(Date.now()-new Date(v.purchase_date))/864e5>90);const unpaid=state.sales.filter(s=>s.payment_status!=='paid');return `${pageHead('Dashboard','Ringkasan kondisi showroom hari ini','<button class="button primary-action" data-modal="vehicle">+ Tambah kendaraan</button>')}<div class="metric-grid"><div class="metric"><div class="label">MODAL DI STOK</div><div class="value">${rupiah(capital)}</div><div class="meta">${inStock.length} unit aktif</div></div><div class="metric"><div class="label">UNIT TERJUAL</div><div class="value">${state.sales.length}</div><div class="meta">Seluruh periode</div></div><div class="metric"><div class="label">LABA BERSIH</div><div class="value ${profit<0?'bad':'up'}">${rupiah(profit)}</div><div class="meta">Setelah biaya dan komisi</div></div><div class="metric"><div class="label">PIUTANG AKTIF</div><div class="value ${unpaid.length?'warn':''}">${unpaid.length}</div><div class="meta">Penjualan belum lunas</div></div></div><div class="dashboard-grid"><section class="panel"><h2>Tindakan prioritas</h2><p class="sub">Hal yang perlu dibereskan lebih dulu.</p><div class="action-list">${old.length?`<div class="action"><i class="dot bad"></i><div><strong>${old.length} unit melewati 90 hari</strong><p>Evaluasi harga, promosi, atau kondisi kendaraan agar modal tidak terlalu lama tertahan.</p></div></div>`:''}${unpaid.length?`<div class="action"><i class="dot warn"></i><div><strong>${unpaid.length} pembayaran belum lunas</strong><p>Periksa pencairan leasing atau sisa pembayaran customer.</p></div></div>`:''}${!old.length&&!unpaid.length?'<div class="action"><i class="dot ok"></i><div><strong>Kondisi stok sehat</strong><p>Tidak ada peringatan penting pada data saat ini.</p></div></div>':''}</div></section><section class="panel"><h2>Stok terbaru</h2><p class="sub">Unit yang terakhir ditambahkan.</p>${stockRows(inStock.slice(0,5))}</section></div>`}
-function stockRows(rows){return rows.length?`<div class="table-wrap"><table class="data-table"><thead><tr><th>Unit</th><th>Target jual</th><th>Status</th></tr></thead><tbody>${rows.map(v=>`<tr><td><strong>${esc(v.brand)} ${esc(v.model)}</strong><br><small>${esc(v.code)} · ${v.year||'-'}</small></td><td>${rupiah(v.target_price)}</td><td>${status(v.status)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Belum ada kendaraan. Tambahkan unit pertama.</div>'}
-function vehicles(){return `${pageHead('Kendaraan','Stok mobil dan motor showroom.','<button class="button primary-action" data-modal="vehicle">+ Tambah kendaraan</button>')}<div class="panel"><div class="filter-row"><input id="vehicleSearch" placeholder="Cari kode, merek, tipe, atau nomor polisi"><select id="vehicleStatus"><option value="">Semua status</option>${['inspection','reconditioning','ready','listed','booked','sold','delivered'].map(s=>`<option>${s}</option>`).join('')}</select></div><div id="vehicleTable">${vehicleTable(state.vehicles)}</div></div>`}
-function vehicleTable(rows){return rows.length?`<div class="table-wrap"><table class="data-table"><thead><tr><th>Unit</th><th>Jenis</th><th>Modal</th><th>Target jual</th><th>Umur</th><th>Status</th><th></th></tr></thead><tbody>${rows.map(v=>{const total=Number(v.purchase_price)+state.costs.filter(c=>c.vehicle_id===v.id).reduce((a,c)=>a+Number(c.amount),0);const age=Math.max(0,Math.floor((Date.now()-new Date(v.purchase_date))/864e5));return `<tr><td><strong>${esc(v.brand)} ${esc(v.model)}</strong><br><small>${esc(v.code)} · ${v.year||'-'} · ${esc(v.license_plate||'-')}</small></td><td>${v.vehicle_type==='car'?'Mobil':'Motor'}</td><td>${rupiah(total)}</td><td>${rupiah(v.target_price)}</td><td class="${age>90?'bad':''}">${age} hari</td><td>${status(v.status)}</td><td><button class="icon-btn" data-edit-vehicle="${v.id}" title="Ubah">✎</button></td></tr>`}).join('')}</tbody></table></div>`:'<div class="empty">Tidak ada kendaraan yang sesuai.</div>'}
-function costs(){return `${pageHead('Biaya Rekondisi','Catat semua biaya agar HPP aktual tidak menipu.','<button class="button primary-action" data-modal="cost">+ Catat biaya</button>')}<div class="metric-grid"><div class="metric"><div class="label">TOTAL REKONDISI</div><div class="value">${rupiah(state.costs.reduce((a,c)=>a+Number(c.amount),0))}</div><div class="meta">Semua unit</div></div><div class="metric"><div class="label">CATATAN BIAYA</div><div class="value">${state.costs.length}</div><div class="meta">Transaksi tercatat</div></div></div><div class="panel" style="margin-top:16px"><div class="table-wrap"><table class="data-table"><thead><tr><th>Tanggal</th><th>Unit</th><th>Kategori</th><th>Bengkel/Keterangan</th><th>Nominal</th></tr></thead><tbody>${state.costs.map(c=>{const v=state.vehicles.find(v=>v.id===c.vehicle_id);return `<tr><td>${c.cost_date}</td><td>${esc(v?`${v.brand} ${v.model}`:'-')}</td><td>${esc(c.category)}</td><td>${esc(c.vendor||c.note||'-')}</td><td>${rupiah(c.amount)}</td></tr>`}).join('')||'<tr><td colspan="5"><div class="empty">Belum ada biaya rekondisi.</div></td></tr>'}</tbody></table></div></div>`}
-function customers(){return `${pageHead('Customer','Simpan data calon pembeli dan pelanggan.','<button class="button primary-action" data-modal="customer">+ Tambah customer</button>')}<div class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Nama</th><th>WhatsApp</th><th>Kota</th><th>Sumber</th><th>Catatan</th></tr></thead><tbody>${state.customers.map(c=>`<tr><td><strong>${esc(c.full_name)}</strong></td><td>${esc(c.phone||'-')}</td><td>${esc(c.city||'-')}</td><td>${esc(c.source||'-')}</td><td>${esc(c.note||'-')}</td></tr>`).join('')||'<tr><td colspan="5"><div class="empty">Belum ada customer.</div></td></tr>'}</tbody></table></div></div>`}
-function leads(){return `${pageHead('Lead & Follow-up','Pantau peluang sebelum berubah menjadi penjualan.','<button class="button primary-action" data-modal="lead">+ Tambah lead</button>')}<div class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Customer</th><th>Unit diminati</th><th>Status</th><th>Follow-up</th><th>Penawaran</th></tr></thead><tbody>${state.leads.map(l=>`<tr><td><strong>${esc(l.customers?.full_name||'-')}</strong></td><td>${esc(l.vehicles?`${l.vehicles.brand} ${l.vehicles.model}`:'-')}</td><td>${status(l.status)}</td><td>${l.next_follow_up_at?new Date(l.next_follow_up_at).toLocaleDateString('id-ID'):'-'}</td><td>${rupiah(l.offered_price)}</td></tr>`).join('')||'<tr><td colspan="5"><div class="empty">Belum ada lead.</div></td></tr>'}</tbody></table></div></div>`}
-function sales(){return `${pageHead('Penjualan','Unit yang terjual, pembayaran, dan laba per transaksi.','<button class="button primary-action" data-modal="sale">+ Catat penjualan</button>')}<div class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>No. nota</th><th>Unit</th><th>Customer</th><th>Harga jual</th><th>Status bayar</th><th>Perkiraan laba</th></tr></thead><tbody>${state.sales.map(s=>{const v=state.vehicles.find(x=>x.id===s.vehicle_id);const hpp=v?Number(v.purchase_price)+state.costs.filter(c=>c.vehicle_id===v.id).reduce((a,c)=>a+Number(c.amount),0):0;const profit=Number(s.sale_price)-Number(s.discount)-Number(s.commission)-hpp;return `<tr><td><strong>${esc(s.invoice_number)}</strong><br><small>${s.sale_date}</small></td><td>${esc(s.vehicles?`${s.vehicles.brand} ${s.vehicles.model}`:'-')}</td><td>${esc(s.customers?.full_name||'-')}</td><td>${rupiah(s.sale_price)}</td><td>${status(s.payment_status)}</td><td class="${profit<0?'bad':'up'}">${rupiah(profit)}</td></tr>`}).join('')||'<tr><td colspan="6"><div class="empty">Belum ada penjualan.</div></td></tr>'}</tbody></table></div></div>`}
-function finance(){const balance=state.accounts.reduce((sum,a)=>sum+Number(a.opening_balance)+state.transactions.filter(t=>t.account_id===a.id).reduce((x,t)=>x+(t.flow==='income'?Number(t.amount):-Number(t.amount)),0),0);return `${pageHead('Keuangan','Kas, pemasukan, dan pengeluaran operasional.','<button class="button primary-action" data-modal="transaction">+ Catat transaksi</button>')}<div class="metric-grid"><div class="metric"><div class="label">SALDO KAS</div><div class="value">${rupiah(balance)}</div><div class="meta">${state.accounts.length} akun kas</div></div><div class="metric"><div class="label">PEMASUKAN</div><div class="value up">${rupiah(state.transactions.filter(t=>t.flow==='income').reduce((a,t)=>a+Number(t.amount),0))}</div><div class="meta">Transaksi tercatat</div></div><div class="metric"><div class="label">PENGELUARAN</div><div class="value bad">${rupiah(state.transactions.filter(t=>t.flow==='expense').reduce((a,t)=>a+Number(t.amount),0))}</div><div class="meta">Transaksi tercatat</div></div></div><div class="panel" style="margin-top:16px"><div class="table-wrap"><table class="data-table"><thead><tr><th>Tanggal</th><th>Arus</th><th>Kategori</th><th>Keterangan</th><th>Nilai</th></tr></thead><tbody>${state.transactions.map(t=>`<tr><td>${t.transaction_date}</td><td class="${t.flow==='income'?'up':'bad'}">${t.flow==='income'?'Masuk':'Keluar'}</td><td>${esc(t.category)}</td><td>${esc(t.note||'-')}</td><td>${rupiah(t.amount)}</td></tr>`).join('')||'<tr><td colspan="5"><div class="empty">Belum ada transaksi kas.</div></td></tr>'}</tbody></table></div></div>`}
-function reports(){const inStock=state.vehicles.filter(v=>!['sold','delivered','cancelled'].includes(v.status));return `${pageHead('Laporan','Ringkasan yang siap diekspor atau dicetak.')}<div class="dashboard-grid"><section class="panel"><h2>Laporan Stok</h2><p class="sub">${inStock.length} kendaraan masih tersedia.</p><button class="button secondary" data-print="stock">Cetak laporan stok</button></section><section class="panel"><h2>Laporan Penjualan</h2><p class="sub">${state.sales.length} transaksi penjualan tercatat.</p><button class="button secondary" data-print="sales">Cetak laporan penjualan</button></section><section class="panel"><h2>Laporan Piutang</h2><p class="sub">${state.sales.filter(s=>s.payment_status!=='paid').length} transaksi belum lunas.</p><button class="button secondary" data-print="receivable">Cetak laporan piutang</button></section><section class="panel"><h2>Catatan</h2><p class="sub">Cetak memakai data akun showroom yang sedang aktif.</p></section></div>`}
-function settings(){return `${pageHead('Pengaturan Showroom','Identitas showroom dan jenis usaha akun ini.','<button class="button primary-action" id="saveSettings">Simpan perubahan</button>')}<div class="panel"><div class="form-grid"><div class="span-2"><label>Nama showroom</label><input id="setName" value="${esc(state.showroom.name)}"></div><div><label>Kota</label><input id="setCity" value="${esc(state.showroom.city||'')}"></div><div><label>WhatsApp</label><input id="setPhone" value="${esc(state.showroom.phone||'')}"></div><div><label>Jenis usaha</label><select id="setType"><option value="car" ${state.showroom.business_type==='car'?'selected':''}>Showroom Mobil</option><option value="motorcycle" ${state.showroom.business_type==='motorcycle'?'selected':''}>Showroom Motor</option><option value="both" ${state.showroom.business_type==='both'?'selected':''}>Mobil + Motor</option></select></div><div><label>Alamat</label><input id="setAddress" value="${esc(state.showroom.address||'')}"></div></div></div>`}
-function bindPage(){document.querySelectorAll('[data-modal]').forEach(b=>b.onclick=()=>openModal(b.dataset.modal));document.querySelectorAll('[data-edit-vehicle]').forEach(b=>b.onclick=()=>openModal('vehicle',state.vehicles.find(v=>v.id===b.dataset.editVehicle)));const q=document.querySelector('#vehicleSearch'),st=document.querySelector('#vehicleStatus');if(q){const filter=()=>{const term=q.value.toLowerCase();document.querySelector('#vehicleTable').innerHTML=vehicleTable(state.vehicles.filter(v=>(!term||[v.code,v.brand,v.model,v.license_plate].join(' ').toLowerCase().includes(term))&&(!st.value||v.status===st.value)))};q.oninput=filter;st.onchange=filter}document.querySelector('#saveSettings')?.addEventListener('click',saveSettings);document.querySelectorAll('[data-print]').forEach(b=>b.onclick=()=>window.print());}
-function options(items,selected='',labelFn=x=>x){return items.map(x=>`<option value="${x.id||x}" ${(x.id||x)===selected?'selected':''}>${esc(labelFn(x))}</option>`).join('')}
-function openModal(type,data={}){const vehicleOptions=options(state.vehicles.filter(v=>!['sold','delivered','cancelled'].includes(v.status)),data.vehicle_id,v=>`${v.code} — ${v.brand} ${v.model}`),customerOptions=options(state.customers,data.customer_id,c=>c.full_name);const forms={vehicle:`<h2>${data.id?'Ubah':'Tambah'} kendaraan</h2><div class="form-grid"><div><label>Kode unit</label><input name="code" required value="${esc(data.code||'')}"></div><div><label>Jenis</label><select name="vehicle_type"><option value="car" ${data.vehicle_type==='car'?'selected':''}>Mobil</option><option value="motorcycle" ${data.vehicle_type==='motorcycle'?'selected':''}>Motor</option></select></div><div><label>Merek</label><input name="brand" required value="${esc(data.brand||'')}"></div><div><label>Tipe/Model</label><input name="model" required value="${esc(data.model||'')}"></div><div><label>Tahun</label><input type="number" name="year" value="${data.year||''}"></div><div><label>Nomor polisi</label><input name="license_plate" value="${esc(data.license_plate||'')}"></div><div><label>Harga beli</label><input type="number" min="0" name="purchase_price" value="${data.purchase_price||0}"></div><div><label>Target jual</label><input type="number" min="0" name="target_price" value="${data.target_price||0}"></div><div><label>Tanggal beli</label><input type="date" name="purchase_date" value="${data.purchase_date||new Date().toISOString().slice(0,10)}"></div><div><label>Status</label><select name="status">${options(['inspection','reconditioning','ready','listed','booked','sold','delivered'],data.status||'inspection')}</select></div><div class="span-2"><label>Catatan</label><textarea name="description">${esc(data.description||'')}</textarea></div></div>`,cost:`<h2>Catat biaya rekondisi</h2><div class="form-grid"><div class="span-2"><label>Kendaraan</label><select name="vehicle_id" required><option value="">Pilih unit</option>${vehicleOptions}</select></div><div><label>Tanggal</label><input type="date" name="cost_date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Kategori</label><input name="category" required placeholder="Contoh: Mesin / CVT / Ban"></div><div><label>Nominal</label><input type="number" min="1" name="amount" required></div><div><label>Bengkel/vendor</label><input name="vendor"></div><div class="span-2"><label>Catatan</label><textarea name="note"></textarea></div></div>`,customer:`<h2>Tambah customer</h2><div class="form-grid"><div class="span-2"><label>Nama lengkap</label><input name="full_name" required></div><div><label>WhatsApp</label><input name="phone"></div><div><label>Kota</label><input name="city"></div><div><label>Sumber lead</label><input name="source" placeholder="WhatsApp, Instagram, walk-in"></div><div class="span-2"><label>Catatan</label><textarea name="note"></textarea></div></div>`,lead:`<h2>Tambah lead</h2><div class="form-grid"><div><label>Customer</label><select name="customer_id" required><option value="">Pilih customer</option>${customerOptions}</select></div><div><label>Unit diminati</label><select name="vehicle_id"><option value="">Belum memilih unit</option>${vehicleOptions}</select></div><div><label>Status</label><select name="status">${options(['new','contacted','interested','visit_scheduled','test_drive','negotiation','booked','waiting_payment','closed','lost','follow_up'],'new')}</select></div><div><label>Follow-up berikutnya</label><input type="datetime-local" name="next_follow_up_at"></div><div><label>Penawaran</label><input type="number" name="offered_price"></div><div class="span-2"><label>Catatan</label><textarea name="note"></textarea></div></div>`,sale:`<h2>Catat penjualan</h2><div class="form-grid"><div><label>Unit terjual</label><select name="vehicle_id" required><option value="">Pilih unit</option>${vehicleOptions}</select></div><div><label>Customer</label><select name="customer_id"><option value="">Pilih customer</option>${customerOptions}</select></div><div><label>No. nota</label><input name="invoice_number" required value="NJ-${String(Date.now()).slice(-6)}"></div><div><label>Tanggal jual</label><input type="date" name="sale_date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Harga jual</label><input type="number" min="0" name="sale_price" required></div><div><label>Diskon</label><input type="number" min="0" name="discount" value="0"></div><div><label>Komisi sales</label><input type="number" min="0" name="commission" value="0"></div><div><label>Status pembayaran</label><select name="payment_status">${options(['unpaid','partial','paid'],'unpaid')}</select></div><div class="span-2"><label>Metode pembayaran / leasing</label><input name="payment_method"></div></div>`,transaction:`<h2>Catat transaksi kas</h2><div class="form-grid"><div><label>Arus</label><select name="flow"><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option></select></div><div><label>Akun kas</label><select name="account_id"><option value="">Tanpa akun</option>${options(state.accounts,'',a=>a.name)}</select></div><div><label>Tanggal</label><input type="date" name="transaction_date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Kategori</label><input name="category" required></div><div><label>Nominal</label><input type="number" min="1" name="amount" required></div><div class="span-2"><label>Keterangan</label><textarea name="note"></textarea></div></div>`};const modal=document.createElement('div');modal.className='modal-backdrop';modal.innerHTML=`<section class="modal"><div class="modal-head">${forms[type]}<button class="icon-btn" data-close>×</button></div></section>`;const title=modal.querySelector('h2');const form=document.createElement('form');form.className='modal-body';form.innerHTML=title.parentElement.innerHTML.replace(title.outerHTML,'')+`<div class="modal-foot"><button type="button" class="button secondary" data-close>Batal</button><button class="button">Simpan</button></div>`;modal.querySelector('.modal').innerHTML='';modal.querySelector('.modal').append(form);document.body.append(modal);modal.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>modal.remove());modal.onclick=e=>{if(e.target===modal)modal.remove()};form.onsubmit=e=>saveForm(e,type,data.id,modal);}
-async function saveForm(e,type,id,modal){e.preventDefault();const raw=Object.fromEntries(new FormData(e.currentTarget));Object.keys(raw).forEach(k=>{if(raw[k]==='')raw[k]=null});const numberFields=['year','purchase_price','target_price','amount','offered_price','sale_price','discount','commission','paid_amount'];numberFields.forEach(k=>{if(k in raw&&raw[k]!=null)raw[k]=Number(raw[k])});const table={vehicle:'vehicles',cost:'vehicle_costs',customer:'customers',lead:'leads',sale:'sales',transaction:'cash_transactions'}[type];raw.showroom_id=state.showroom.id;if(type==='vehicle'){delete raw.code;if(state.showroom.business_type!=='both')raw.vehicle_type=state.showroom.business_type}const request=id?db.from(table).update(raw).eq('id',id):db.from(table).insert(raw);const {error}=await request.select();if(error)return toast(error.message,'error');modal.remove();await loadData();renderShell();toast('Data berhasil disimpan');}
-async function saveSettings(){const row={name:document.querySelector('#setName').value,city:document.querySelector('#setCity').value,phone:document.querySelector('#setPhone').value,address:document.querySelector('#setAddress').value,business_type:document.querySelector('#setType').value};const {data,error}=await db.from('showrooms').update(row).eq('id',state.showroom.id).select().single();if(error)return toast(error.message);state.showroom=data;renderShell();toast('Pengaturan disimpan');}
-document.addEventListener('click',event=>{
-  if(event.target.matches('[data-close]')) event.preventDefault();
-},true);
-db.auth.onAuthStateChange((_event,session)=>{if(!session&&state.session){state.session=null;renderAuth()}});init();
+const app = document.querySelector("#app");
+const mobileIcons = {
+  dashboard: "home",
+  vehicles: "directions_car",
+  sales: "receipt_long",
+  finance: "account_balance_wallet",
+  costs: "build",
+  customers: "group",
+  leads: "follow_the_signs",
+  reports: "bar_chart",
+  settings: "settings",
+};
+function renderShellMobileV3() {
+  const user =
+      state.session.user.user_metadata?.username ||
+      state.session.user.email.split("@")[0],
+    business =
+      state.showroom.business_type === "both"
+        ? "Mobil & Motor"
+        : state.showroom.business_type === "car"
+          ? "Mobil"
+          : "Motor";
+  app.innerHTML = `<div class="shell shell-v3"><aside class="sidebar"><div class="side-brand">${logo()}<div><strong>Garasi Pro</strong><span>Bantu Beres</span></div></div><nav class="nav">${navV2.map(([id, n]) => `<button data-view="${id}" class="${state.view === id ? "active" : ""}"><span class="material-symbols-rounded">${mobileIcons[id]}</span>${n}</button>`).join("")}</nav><div class="sidebar-foot"><div class="user-chip">${esc(user)}</div><button class="logout-button" data-logout>Keluar akun</button></div></aside><main class="main"><header class="topbar"><div class="mobile-brand">${logo()}<div><strong>${esc(state.showroom.name)}</strong><span>Showroom ${business}</span></div></div><div class="showroom-name">${esc(state.showroom.name)}<span>Showroom ${business} · ${esc(state.showroom.city || "Belum ada kota")}</span></div><div class="top-actions"><button class="icon-btn desktop-refresh" data-refresh aria-label="Muat ulang"><span class="material-symbols-rounded">refresh</span></button><button class="icon-btn" data-theme aria-label="Ganti tema"><span class="material-symbols-rounded">${document.documentElement.dataset.theme === "dark" ? "light_mode" : "dark_mode"}</span></button><button class="icon-btn mobile-menu-button" data-menu aria-label="Buka menu"><span class="material-symbols-rounded">menu</span></button></div></header><section id="page" class="page"></section></main><nav class="mobile-nav">${navV2
+    .slice(0, 4)
+    .map(
+      ([id, n]) =>
+        `<button data-view="${id}" class="${state.view === id ? "active" : ""}"><span class="material-symbols-rounded">${mobileIcons[id]}</span><span>${n}</span></button>`,
+    )
+    .join(
+      "",
+    )}</nav><aside class="mobile-drawer" aria-hidden="true"><div class="drawer-brand">${logo()}<div><strong>Bantu Beres</strong><span>Garasi Pro</span></div><button class="icon-btn" data-menu-close aria-label="Tutup menu"><span class="material-symbols-rounded">close</span></button></div><div class="drawer-account"><small>Akun showroom</small><strong>${esc(state.showroom.name)}</strong><span>${esc(user)}</span></div><nav>${navV2.map(([id, n]) => `<button data-view="${id}" class="${state.view === id ? "active" : ""}"><span class="material-symbols-rounded">${mobileIcons[id]}</span>${n}</button>`).join("")}</nav><button class="drawer-logout" data-logout><span class="material-symbols-rounded">logout</span> Keluar akun</button></aside><div class="drawer-shade" data-menu-close></div></div>`;
+  document
+    .querySelectorAll("[data-view]")
+    .forEach((b) => (b.onclick = () => gotoView(b.dataset.view)));
+  document.querySelectorAll("[data-logout]").forEach(
+    (b) =>
+      (b.onclick = async () => {
+        await db.auth.signOut();
+        state = { ...state, session: null, showroom: null };
+        renderAuth();
+      }),
+  );
+  document.querySelector("[data-refresh]").onclick = async () => {
+    await loadData();
+    renderPage();
+    toast("Data berhasil diperbarui");
+  };
+  document.querySelector("[data-theme]").onclick = () => {
+    setTheme(
+      document.documentElement.dataset.theme === "dark" ? "light" : "dark",
+    );
+    renderShellMobileV3();
+  };
+  const shell = document.querySelector(".shell"),
+    open = () => {
+      shell.classList.add("drawer-open");
+      document.body.classList.add("no-scroll");
+    },
+    close = () => {
+      shell.classList.remove("drawer-open");
+      document.body.classList.remove("no-scroll");
+    };
+  document.querySelector("[data-menu]").onclick = open;
+  document
+    .querySelectorAll("[data-menu-close]")
+    .forEach((x) => (x.onclick = close));
+  renderPage();
+}
+let state = {
+  session: null,
+  showroom: null,
+  view: "dashboard",
+  vehicles: [],
+  costs: [],
+  customers: [],
+  leads: [],
+  sales: [],
+  accounts: [],
+  transactions: [],
+};
+const rupiah = (n) =>
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(Number(n || 0));
+const esc = (s) =>
+  String(s ?? "").replace(
+    /[&<>'"]/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[
+        c
+      ],
+  );
+const mark = () =>
+  '<span class="brand-mark logo-bantuberes" role="img" aria-label="BantuBeres"></span>';
+function toast(msg) {
+  const el = document.querySelector("#toast");
+  el.textContent = msg;
+  el.classList.add("toast-show");
+  setTimeout(() => el.classList.remove("toast-show"), 3200);
+}
+function status(s) {
+  return `<span class="status ${String(s).replaceAll(" ", "_")}">${esc(String(s).replaceAll("_", " "))}</span>`;
+}
+async function init() {
+  const {
+    data: { session },
+  } = await db.auth.getSession();
+  state.session = session;
+  if (!session) return renderAuth();
+  await loadShowroom();
+}
+async function loadShowroom() {
+  const { data, error } = await db
+    .from("showrooms")
+    .select("*")
+    .eq("owner_id", state.session.user.id)
+    .limit(1);
+  if (error) return toast(error.message);
+  state.showroom = data?.[0];
+  if (!state.showroom) return renderOnboarding();
+  await loadData();
+  renderShell();
+}
+async function loadData() {
+  const id = state.showroom.id;
+  const [v, c, cu, l, s, a, t] = await Promise.all([
+    db
+      .from("vehicles")
+      .select("*")
+      .eq("showroom_id", id)
+      .order("created_at", { ascending: false }),
+    db.from("vehicle_costs").select("*").eq("showroom_id", id),
+    db
+      .from("customers")
+      .select("*")
+      .eq("showroom_id", id)
+      .order("created_at", { ascending: false }),
+    db
+      .from("leads")
+      .select("*, customers(full_name), vehicles(brand,model,year)")
+      .eq("showroom_id", id)
+      .order("created_at", { ascending: false }),
+    db
+      .from("sales")
+      .select("*, vehicles(brand,model,year), customers(full_name)")
+      .eq("showroom_id", id)
+      .order("sale_date", { ascending: false }),
+    db.from("cash_accounts").select("*").eq("showroom_id", id),
+    db
+      .from("cash_transactions")
+      .select("*")
+      .eq("showroom_id", id)
+      .order("transaction_date", { ascending: false }),
+  ]);
+  Object.assign(state, {
+    vehicles: v.data || [],
+    costs: c.data || [],
+    customers: cu.data || [],
+    leads: l.data || [],
+    sales: s.data || [],
+    accounts: a.data || [],
+    transactions: t.data || [],
+  });
+}
+function renderAuth() {
+  app.innerHTML = `<main class="auth"><section class="auth-card"><div class="brand">${mark()}<span>Bantu Beres Garasi Pro</span></div><h1>Kelola showroom lebih jelas.</h1><p>Catat mobil atau motor, hitung modal sebenarnya, dan pantau penjualan per unit.</p><div class="tabs"><button class="active" data-auth="login">Masuk</button><button data-auth="register">Daftar</button></div><form id="authForm"><label>Username</label><input name="username" required autocomplete="username" placeholder="Contoh: garasimaju"><label>Kata sandi</label><input type="password" name="password" required autocomplete="current-password" minlength="6" placeholder="Minimal 6 karakter"><button class="button full">Masuk ke aplikasi</button></form><p class="hint">Tidak memerlukan email aktif. Setiap showroom memiliki ruang data sendiri.</p></section></main>`;
+  document
+    .querySelectorAll("[data-auth]")
+    .forEach((b) => (b.onclick = () => switchAuth(b.dataset.auth)));
+  document.querySelector("#authForm").onsubmit = authSubmit;
+}
+function switchAuth(mode) {
+  document
+    .querySelectorAll("[data-auth]")
+    .forEach((b) => b.classList.toggle("active", b.dataset.auth === mode));
+  document.querySelector("#authForm").innerHTML =
+    `${mode === "register" ? '<label>Nama lengkap</label><input name="name" required autocomplete="name" placeholder="Nama pemilik showroom">' : ""}<label>Username</label><input name="username" required autocomplete="username" placeholder="Contoh: garasimaju"><label>Kata sandi</label><input type="password" name="password" required autocomplete="${mode === "register" ? "new-password" : "current-password"}" minlength="6" placeholder="Minimal 6 karakter"><button class="button full">${mode === "register" ? "Buat akun" : "Masuk ke aplikasi"}</button>`;
+  document.querySelector("#authForm").dataset.mode = mode;
+}
+function loginIdentity(value) {
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (raw.includes("@")) return raw;
+  return /^[a-z0-9._-]{3,32}$/.test(raw)
+    ? `${raw}@login.garasipro.local`
+    : null;
+}
+async function registerUsernameAccount(username, password, fullName) {
+  const { data, error } = await db.functions.invoke("account-signup", {
+    body: { username, password, full_name: fullName },
+  });
+  if (!error) return { data };
+  let message = "Pendaftaran belum dapat diproses. Coba lagi.";
+  try {
+    const detail = await error.context.json();
+    message = detail.error || message;
+  } catch {}
+  return { error: { message } };
+}
+async function authSubmit(e) {
+  e.preventDefault();
+  const form = e.currentTarget,
+    f = new FormData(form),
+    username = f.get("username"),
+    email = loginIdentity(username),
+    password = f.get("password"),
+    register = form.dataset.mode === "register";
+  if (!email)
+    return toast(
+      "Username gunakan 3–32 karakter: huruf, angka, titik, garis bawah, atau strip.",
+    );
+  const submit = form.querySelector('button[type="submit"],button:not([type])');
+  submit.disabled = true;
+  submit.textContent = register ? "Membuat akun..." : "Memeriksa akun...";
+  const r = register
+    ? await registerUsernameAccount(
+        String(username).trim(),
+        password,
+        f.get("name"),
+      )
+    : await db.auth.signInWithPassword({ email, password });
+  if (r.error) {
+    submit.disabled = false;
+    submit.textContent = register ? "Buat akun" : "Masuk ke aplikasi";
+    return toast(r.error.message);
+  }
+  const login = register
+    ? await db.auth.signInWithPassword({ email, password })
+    : r;
+  if (login.error || !login.data.session) {
+    submit.disabled = false;
+    submit.textContent = register ? "Buat akun" : "Masuk ke aplikasi";
+    return toast(
+      login.error?.message || "Sesi akun belum terbentuk. Coba masuk kembali.",
+    );
+  }
+  state.session = login.data.session;
+  await loadShowroom();
+}
+function renderOnboarding() {
+  app.innerHTML = `<main class="auth"><section class="onboarding"><div class="brand">${mark()}<span>Bantu Beres Garasi Pro</span></div><h1>Siapkan showroom kamu</h1><p>Jenis usaha menentukan formulir kendaraan, kategori biaya, katalog, dan laporan akun ini.</p><div class="panel"><form id="setupForm"><label>Nama showroom</label><input name="name" required placeholder="Contoh: Garasi Maju Jaya"><div class="form-grid"><div><label>Kota</label><input name="city" placeholder="Contoh: Malang"></div><div><label>Nomor WhatsApp</label><input name="phone" placeholder="08xxxxxxxxxx"></div></div><label>Jenis usaha</label><div class="choice-grid" id="typeChoices"><button type="button" class="choice selected" data-type="car"><strong>Showroom Mobil</strong><span>Kelola stok dan penjualan mobil.</span></button><button type="button" class="choice" data-type="motorcycle"><strong>Showroom Motor</strong><span>Kelola stok dan penjualan motor.</span></button><button type="button" class="choice" data-type="both"><strong>Mobil + Motor</strong><span>Gunakan dua kategori kendaraan.</span></button></div><input type="hidden" name="business_type" value="car"><button class="button full">Buat ruang showroom</button></form></div></section></main>`;
+  document.querySelectorAll("[data-type]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        document
+          .querySelectorAll("[data-type]")
+          .forEach((x) => x.classList.remove("selected"));
+        b.classList.add("selected");
+        document.querySelector("[name=business_type]").value = b.dataset.type;
+      }),
+  );
+  document.querySelector("#setupForm").onsubmit = setupShowroom;
+}
+async function setupShowroom(e) {
+  e.preventDefault();
+  const f = new FormData(e.currentTarget),
+    row = {
+      owner_id: state.session.user.id,
+      name: f.get("name"),
+      city: f.get("city"),
+      phone: f.get("phone"),
+      business_type: f.get("business_type"),
+    };
+  const { data, error } = await db
+    .from("showrooms")
+    .insert(row)
+    .select()
+    .single();
+  if (error) return toast(error.message);
+  const r = await db
+    .from("showroom_members")
+    .insert({
+      showroom_id: data.id,
+      user_id: state.session.user.id,
+      role: "owner",
+    });
+  if (r.error) return toast(r.error.message);
+  await db
+    .from("cash_accounts")
+    .insert({ showroom_id: data.id, name: "Kas Utama", account_type: "cash" });
+  state.showroom = data;
+  await loadData();
+  renderShell();
+  toast("Showroom berhasil dibuat");
+}
+const nav = [
+  ["dashboard", "Dashboard"],
+  ["vehicles", "Kendaraan"],
+  ["costs", "Rekondisi"],
+  ["customers", "Customer"],
+  ["leads", "Lead & Follow-up"],
+  ["sales", "Penjualan"],
+  ["finance", "Keuangan"],
+  ["reports", "Laporan"],
+  ["settings", "Pengaturan"],
+];
+function renderShell() {
+  app.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand">${mark()}<span>Garasi Pro</span></div><div class="side-section">Operasional</div><nav class="nav">${nav.map(([id, n]) => `<button data-view="${id}" class="${state.view === id ? "active" : ""}">${n}</button>`).join("")}</nav><div class="sidebar-foot"><div class="user-chip">${esc(state.session.user.user_metadata?.username || state.session.user.email)}</div><button id="logout" class="nav">Keluar akun</button></div></aside><main class="main"><header class="topbar"><div class="showroom-name">${esc(state.showroom.name)}<span>${state.showroom.business_type === "both" ? "Mobil & Motor" : state.showroom.business_type === "car" ? "Showroom Mobil" : "Showroom Motor"} · ${esc(state.showroom.city || "Belum ada kota")}</span></div><div class="top-actions"><button class="icon-btn" id="refresh" title="Muat ulang">↻</button><button class="icon-btn" id="theme" title="Tampilan">◐</button></div></header><section id="page" class="page"></section></main></div>`;
+  document.querySelectorAll("[data-view]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        state.view = b.dataset.view;
+        renderShell();
+      }),
+  );
+  document.querySelector("#logout").onclick = async () => {
+    await db.auth.signOut();
+    state = { ...state, session: null, showroom: null };
+    renderAuth();
+  };
+  document.querySelector("#refresh").onclick = async () => {
+    await loadData();
+    renderPage();
+    toast("Data diperbarui");
+  };
+  renderPage();
+}
+function pageHead(title, desc, button = "") {
+  return `<div class="page-head"><div><h1>${title}</h1><p>${desc}</p></div>${button}</div>`;
+}
+function renderPage() {
+  const p = document.querySelector("#page");
+  const m = {
+    dashboard: dashboard,
+    vehicles: vehicles,
+    costs: costs,
+    customers: customers,
+    leads: leads,
+    sales: sales,
+    finance: finance,
+    reports: reports,
+    settings: settings,
+  };
+  p.innerHTML = m[state.view]();
+  bindPage();
+}
+function dashboard() {
+  const inStock = state.vehicles.filter(
+    (v) => !["sold", "delivered", "cancelled"].includes(v.status),
+  );
+  const hpp = (v) =>
+    Number(v.purchase_price) +
+    state.costs
+      .filter((c) => c.vehicle_id === v.id)
+      .reduce((a, c) => a + Number(c.amount), 0);
+  const capital = inStock.reduce((a, v) => a + hpp(v), 0);
+  const profit = state.sales.reduce((a, s) => {
+    const v = state.vehicles.find((x) => x.id === s.vehicle_id);
+    return (
+      a +
+      Number(s.sale_price) -
+      Number(s.discount) -
+      Number(s.commission) -
+      (v ? hpp(v) : 0)
+    );
+  }, 0);
+  const old = inStock.filter(
+    (v) => (Date.now() - new Date(v.purchase_date)) / 864e5 > 90,
+  );
+  const unpaid = state.sales.filter((s) => s.payment_status !== "paid");
+  return `${pageHead("Dashboard", "Ringkasan kondisi showroom hari ini", '<button class="button primary-action" data-modal="vehicle">+ Tambah kendaraan</button>')}<div class="metric-grid"><div class="metric"><div class="label">MODAL DI STOK</div><div class="value">${rupiah(capital)}</div><div class="meta">${inStock.length} unit aktif</div></div><div class="metric"><div class="label">UNIT TERJUAL</div><div class="value">${state.sales.length}</div><div class="meta">Seluruh periode</div></div><div class="metric"><div class="label">LABA BERSIH</div><div class="value ${profit < 0 ? "bad" : "up"}">${rupiah(profit)}</div><div class="meta">Setelah biaya dan komisi</div></div><div class="metric"><div class="label">PIUTANG AKTIF</div><div class="value ${unpaid.length ? "warn" : ""}">${unpaid.length}</div><div class="meta">Penjualan belum lunas</div></div></div><div class="dashboard-grid"><section class="panel"><h2>Tindakan prioritas</h2><p class="sub">Hal yang perlu dibereskan lebih dulu.</p><div class="action-list">${old.length ? `<div class="action"><i class="dot bad"></i><div><strong>${old.length} unit melewati 90 hari</strong><p>Evaluasi harga, promosi, atau kondisi kendaraan agar modal tidak terlalu lama tertahan.</p></div></div>` : ""}${unpaid.length ? `<div class="action"><i class="dot warn"></i><div><strong>${unpaid.length} pembayaran belum lunas</strong><p>Periksa pencairan leasing atau sisa pembayaran customer.</p></div></div>` : ""}${!old.length && !unpaid.length ? '<div class="action"><i class="dot ok"></i><div><strong>Kondisi stok sehat</strong><p>Tidak ada peringatan penting pada data saat ini.</p></div></div>' : ""}</div></section><section class="panel"><h2>Stok terbaru</h2><p class="sub">Unit yang terakhir ditambahkan.</p>${stockRows(inStock.slice(0, 5))}</section></div>`;
+}
+function stockRows(rows) {
+  return rows.length
+    ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Unit</th><th>Target jual</th><th>Status</th></tr></thead><tbody>${rows.map((v) => `<tr><td><strong>${esc(v.brand)} ${esc(v.model)}</strong><br><small>${esc(v.code)} · ${v.year || "-"}</small></td><td>${rupiah(v.target_price)}</td><td>${status(v.status)}</td></tr>`).join("")}</tbody></table></div>`
+    : '<div class="empty">Belum ada kendaraan. Tambahkan unit pertama.</div>';
+}
+function vehicles() {
+  return `${pageHead("Kendaraan", "Stok mobil dan motor showroom.", '<button class="button primary-action" data-modal="vehicle">+ Tambah kendaraan</button>')}<div class="panel"><div class="filter-row"><input id="vehicleSearch" placeholder="Cari kode, merek, tipe, atau nomor polisi"><select id="vehicleStatus"><option value="">Semua status</option>${["inspection", "reconditioning", "ready", "listed", "booked", "sold", "delivered"].map((s) => `<option>${s}</option>`).join("")}</select></div><div id="vehicleTable">${vehicleTable(state.vehicles)}</div></div>`;
+}
+function vehicleTable(rows) {
+  return rows.length
+    ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Unit</th><th>Jenis</th><th>Modal</th><th>Target jual</th><th>Umur</th><th>Status</th><th></th></tr></thead><tbody>${rows
+        .map((v) => {
+          const total =
+            Number(v.purchase_price) +
+            state.costs
+              .filter((c) => c.vehicle_id === v.id)
+              .reduce((a, c) => a + Number(c.amount), 0);
+          const age = Math.max(
+            0,
+            Math.floor((Date.now() - new Date(v.purchase_date)) / 864e5),
+          );
+          return `<tr><td><strong>${esc(v.brand)} ${esc(v.model)}</strong><br><small>${esc(v.code)} · ${v.year || "-"} · ${esc(v.license_plate || "-")}</small></td><td>${v.vehicle_type === "car" ? "Mobil" : "Motor"}</td><td>${rupiah(total)}</td><td>${rupiah(v.target_price)}</td><td class="${age > 90 ? "bad" : ""}">${age} hari</td><td>${status(v.status)}</td><td><button class="icon-btn" data-edit-vehicle="${v.id}" title="Ubah">✎</button></td></tr>`;
+        })
+        .join("")}</tbody></table></div>`
+    : '<div class="empty">Tidak ada kendaraan yang sesuai.</div>';
+}
+function costs() {
+  return `${pageHead("Biaya Rekondisi", "Catat semua biaya agar HPP aktual tidak menipu.", '<button class="button primary-action" data-modal="cost">+ Catat biaya</button>')}<div class="metric-grid"><div class="metric"><div class="label">TOTAL REKONDISI</div><div class="value">${rupiah(state.costs.reduce((a, c) => a + Number(c.amount), 0))}</div><div class="meta">Semua unit</div></div><div class="metric"><div class="label">CATATAN BIAYA</div><div class="value">${state.costs.length}</div><div class="meta">Transaksi tercatat</div></div></div><div class="panel" style="margin-top:16px"><div class="table-wrap"><table class="data-table"><thead><tr><th>Tanggal</th><th>Unit</th><th>Kategori</th><th>Bengkel/Keterangan</th><th>Nominal</th></tr></thead><tbody>${
+    state.costs
+      .map((c) => {
+        const v = state.vehicles.find((v) => v.id === c.vehicle_id);
+        return `<tr><td>${c.cost_date}</td><td>${esc(v ? `${v.brand} ${v.model}` : "-")}</td><td>${esc(c.category)}</td><td>${esc(c.vendor || c.note || "-")}</td><td>${rupiah(c.amount)}</td></tr>`;
+      })
+      .join("") ||
+    '<tr><td colspan="5"><div class="empty">Belum ada biaya rekondisi.</div></td></tr>'
+  }</tbody></table></div></div>`;
+}
+function customers() {
+  return `${pageHead("Customer", "Simpan data calon pembeli dan pelanggan.", '<button class="button primary-action" data-modal="customer">+ Tambah customer</button>')}<div class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Nama</th><th>WhatsApp</th><th>Kota</th><th>Sumber</th><th>Catatan</th></tr></thead><tbody>${state.customers.map((c) => `<tr><td><strong>${esc(c.full_name)}</strong></td><td>${esc(c.phone || "-")}</td><td>${esc(c.city || "-")}</td><td>${esc(c.source || "-")}</td><td>${esc(c.note || "-")}</td></tr>`).join("") || '<tr><td colspan="5"><div class="empty">Belum ada customer.</div></td></tr>'}</tbody></table></div></div>`;
+}
+function leads() {
+  return `${pageHead("Lead & Follow-up", "Pantau peluang sebelum berubah menjadi penjualan.", '<button class="button primary-action" data-modal="lead">+ Tambah lead</button>')}<div class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Customer</th><th>Unit diminati</th><th>Status</th><th>Follow-up</th><th>Penawaran</th></tr></thead><tbody>${state.leads.map((l) => `<tr><td><strong>${esc(l.customers?.full_name || "-")}</strong></td><td>${esc(l.vehicles ? `${l.vehicles.brand} ${l.vehicles.model}` : "-")}</td><td>${status(l.status)}</td><td>${l.next_follow_up_at ? new Date(l.next_follow_up_at).toLocaleDateString("id-ID") : "-"}</td><td>${rupiah(l.offered_price)}</td></tr>`).join("") || '<tr><td colspan="5"><div class="empty">Belum ada lead.</div></td></tr>'}</tbody></table></div></div>`;
+}
+function sales() {
+  return `${pageHead("Penjualan", "Unit yang terjual, pembayaran, dan laba per transaksi.", '<button class="button primary-action" data-modal="sale">+ Catat penjualan</button>')}<div class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>No. nota</th><th>Unit</th><th>Customer</th><th>Harga jual</th><th>Status bayar</th><th>Perkiraan laba</th></tr></thead><tbody>${
+    state.sales
+      .map((s) => {
+        const v = state.vehicles.find((x) => x.id === s.vehicle_id);
+        const hpp = v
+          ? Number(v.purchase_price) +
+            state.costs
+              .filter((c) => c.vehicle_id === v.id)
+              .reduce((a, c) => a + Number(c.amount), 0)
+          : 0;
+        const profit =
+          Number(s.sale_price) -
+          Number(s.discount) -
+          Number(s.commission) -
+          hpp;
+        return `<tr><td><strong>${esc(s.invoice_number)}</strong><br><small>${s.sale_date}</small></td><td>${esc(s.vehicles ? `${s.vehicles.brand} ${s.vehicles.model}` : "-")}</td><td>${esc(s.customers?.full_name || "-")}</td><td>${rupiah(s.sale_price)}</td><td>${status(s.payment_status)}</td><td class="${profit < 0 ? "bad" : "up"}">${rupiah(profit)}</td></tr>`;
+      })
+      .join("") ||
+    '<tr><td colspan="6"><div class="empty">Belum ada penjualan.</div></td></tr>'
+  }</tbody></table></div></div>`;
+}
+function finance() {
+  const balance = state.accounts.reduce(
+    (sum, a) =>
+      sum +
+      Number(a.opening_balance) +
+      state.transactions
+        .filter((t) => t.account_id === a.id)
+        .reduce(
+          (x, t) =>
+            x + (t.flow === "income" ? Number(t.amount) : -Number(t.amount)),
+          0,
+        ),
+    0,
+  );
+  return `${pageHead("Keuangan", "Kas, pemasukan, dan pengeluaran operasional.", '<button class="button primary-action" data-modal="transaction">+ Catat transaksi</button>')}<div class="metric-grid"><div class="metric"><div class="label">SALDO KAS</div><div class="value">${rupiah(balance)}</div><div class="meta">${state.accounts.length} akun kas</div></div><div class="metric"><div class="label">PEMASUKAN</div><div class="value up">${rupiah(state.transactions.filter((t) => t.flow === "income").reduce((a, t) => a + Number(t.amount), 0))}</div><div class="meta">Transaksi tercatat</div></div><div class="metric"><div class="label">PENGELUARAN</div><div class="value bad">${rupiah(state.transactions.filter((t) => t.flow === "expense").reduce((a, t) => a + Number(t.amount), 0))}</div><div class="meta">Transaksi tercatat</div></div></div><div class="panel" style="margin-top:16px"><div class="table-wrap"><table class="data-table"><thead><tr><th>Tanggal</th><th>Arus</th><th>Kategori</th><th>Keterangan</th><th>Nilai</th></tr></thead><tbody>${state.transactions.map((t) => `<tr><td>${t.transaction_date}</td><td class="${t.flow === "income" ? "up" : "bad"}">${t.flow === "income" ? "Masuk" : "Keluar"}</td><td>${esc(t.category)}</td><td>${esc(t.note || "-")}</td><td>${rupiah(t.amount)}</td></tr>`).join("") || '<tr><td colspan="5"><div class="empty">Belum ada transaksi kas.</div></td></tr>'}</tbody></table></div></div>`;
+}
+function reports() {
+  const inStock = state.vehicles.filter(
+    (v) => !["sold", "delivered", "cancelled"].includes(v.status),
+  );
+  return `${pageHead("Laporan", "Ringkasan yang siap diekspor atau dicetak.")}<div class="dashboard-grid"><section class="panel"><h2>Laporan Stok</h2><p class="sub">${inStock.length} kendaraan masih tersedia.</p><button class="button secondary" data-print="stock">Cetak laporan stok</button></section><section class="panel"><h2>Laporan Penjualan</h2><p class="sub">${state.sales.length} transaksi penjualan tercatat.</p><button class="button secondary" data-print="sales">Cetak laporan penjualan</button></section><section class="panel"><h2>Laporan Piutang</h2><p class="sub">${state.sales.filter((s) => s.payment_status !== "paid").length} transaksi belum lunas.</p><button class="button secondary" data-print="receivable">Cetak laporan piutang</button></section><section class="panel"><h2>Catatan</h2><p class="sub">Cetak memakai data akun showroom yang sedang aktif.</p></section></div>`;
+}
+function settings() {
+  return `${pageHead("Pengaturan Showroom", "Identitas showroom dan jenis usaha akun ini.", '<button class="button primary-action" id="saveSettings">Simpan perubahan</button>')}<div class="panel"><div class="form-grid"><div class="span-2"><label>Nama showroom</label><input id="setName" value="${esc(state.showroom.name)}"></div><div><label>Kota</label><input id="setCity" value="${esc(state.showroom.city || "")}"></div><div><label>WhatsApp</label><input id="setPhone" value="${esc(state.showroom.phone || "")}"></div><div><label>Jenis usaha</label><select id="setType"><option value="car" ${state.showroom.business_type === "car" ? "selected" : ""}>Showroom Mobil</option><option value="motorcycle" ${state.showroom.business_type === "motorcycle" ? "selected" : ""}>Showroom Motor</option><option value="both" ${state.showroom.business_type === "both" ? "selected" : ""}>Mobil + Motor</option></select></div><div><label>Alamat</label><input id="setAddress" value="${esc(state.showroom.address || "")}"></div></div></div>`;
+}
+function bindPage() {
+  document
+    .querySelectorAll("[data-modal]")
+    .forEach((b) => (b.onclick = () => openModal(b.dataset.modal)));
+  document.querySelectorAll("[data-edit-vehicle]").forEach(
+    (b) =>
+      (b.onclick = () =>
+        openModal(
+          "vehicle",
+          state.vehicles.find((v) => v.id === b.dataset.editVehicle),
+        )),
+  );
+  const q = document.querySelector("#vehicleSearch"),
+    st = document.querySelector("#vehicleStatus");
+  if (q) {
+    const filter = () => {
+      const term = q.value.toLowerCase();
+      document.querySelector("#vehicleTable").innerHTML = vehicleTable(
+        state.vehicles.filter(
+          (v) =>
+            (!term ||
+              [v.code, v.brand, v.model, v.license_plate]
+                .join(" ")
+                .toLowerCase()
+                .includes(term)) &&
+            (!st.value || v.status === st.value),
+        ),
+      );
+    };
+    q.oninput = filter;
+    st.onchange = filter;
+  }
+  document
+    .querySelector("#saveSettings")
+    ?.addEventListener("click", saveSettings);
+  document
+    .querySelectorAll("[data-print]")
+    .forEach((b) => (b.onclick = () => window.print()));
+}
+function options(items, selected = "", labelFn = (x) => x) {
+  return items
+    .map(
+      (x) =>
+        `<option value="${x.id || x}" ${(x.id || x) === selected ? "selected" : ""}>${esc(labelFn(x))}</option>`,
+    )
+    .join("");
+}
+function openModal(type, data = {}) {
+  const vehicleOptions = options(
+      state.vehicles.filter(
+        (v) => !["sold", "delivered", "cancelled"].includes(v.status),
+      ),
+      data.vehicle_id,
+      (v) => `${v.code} — ${v.brand} ${v.model}`,
+    ),
+    customerOptions = options(
+      state.customers,
+      data.customer_id,
+      (c) => c.full_name,
+    );
+  const forms = {
+    vehicle: `<h2>${data.id ? "Ubah" : "Tambah"} kendaraan</h2><div class="form-grid"><div><label>Kode unit</label><input name="code" required value="${esc(data.code || "")}"></div><div><label>Jenis</label><select name="vehicle_type"><option value="car" ${data.vehicle_type === "car" ? "selected" : ""}>Mobil</option><option value="motorcycle" ${data.vehicle_type === "motorcycle" ? "selected" : ""}>Motor</option></select></div><div><label>Merek</label><input name="brand" required value="${esc(data.brand || "")}"></div><div><label>Tipe/Model</label><input name="model" required value="${esc(data.model || "")}"></div><div><label>Tahun</label><input type="number" name="year" value="${data.year || ""}"></div><div><label>Nomor polisi</label><input name="license_plate" value="${esc(data.license_plate || "")}"></div><div><label>Harga beli</label><input type="number" min="0" name="purchase_price" value="${data.purchase_price || 0}"></div><div><label>Target jual</label><input type="number" min="0" name="target_price" value="${data.target_price || 0}"></div><div><label>Tanggal beli</label><input type="date" name="purchase_date" value="${data.purchase_date || new Date().toISOString().slice(0, 10)}"></div><div><label>Status</label><select name="status">${options(["inspection", "reconditioning", "ready", "listed", "booked", "sold", "delivered"], data.status || "inspection")}</select></div><div class="span-2"><label>Catatan</label><textarea name="description">${esc(data.description || "")}</textarea></div></div>`,
+    cost: `<h2>Catat biaya rekondisi</h2><div class="form-grid"><div class="span-2"><label>Kendaraan</label><select name="vehicle_id" required><option value="">Pilih unit</option>${vehicleOptions}</select></div><div><label>Tanggal</label><input type="date" name="cost_date" value="${new Date().toISOString().slice(0, 10)}"></div><div><label>Kategori</label><input name="category" required placeholder="Contoh: Mesin / CVT / Ban"></div><div><label>Nominal</label><input type="number" min="1" name="amount" required></div><div><label>Bengkel/vendor</label><input name="vendor"></div><div class="span-2"><label>Catatan</label><textarea name="note"></textarea></div></div>`,
+    customer: `<h2>Tambah customer</h2><div class="form-grid"><div class="span-2"><label>Nama lengkap</label><input name="full_name" required></div><div><label>WhatsApp</label><input name="phone"></div><div><label>Kota</label><input name="city"></div><div><label>Sumber lead</label><input name="source" placeholder="WhatsApp, Instagram, walk-in"></div><div class="span-2"><label>Catatan</label><textarea name="note"></textarea></div></div>`,
+    lead: `<h2>Tambah lead</h2><div class="form-grid"><div><label>Customer</label><select name="customer_id" required><option value="">Pilih customer</option>${customerOptions}</select></div><div><label>Unit diminati</label><select name="vehicle_id"><option value="">Belum memilih unit</option>${vehicleOptions}</select></div><div><label>Status</label><select name="status">${options(["new", "contacted", "interested", "visit_scheduled", "test_drive", "negotiation", "booked", "waiting_payment", "closed", "lost", "follow_up"], "new")}</select></div><div><label>Follow-up berikutnya</label><input type="datetime-local" name="next_follow_up_at"></div><div><label>Penawaran</label><input type="number" name="offered_price"></div><div class="span-2"><label>Catatan</label><textarea name="note"></textarea></div></div>`,
+    sale: `<h2>Catat penjualan</h2><div class="form-grid"><div><label>Unit terjual</label><select name="vehicle_id" required><option value="">Pilih unit</option>${vehicleOptions}</select></div><div><label>Customer</label><select name="customer_id"><option value="">Pilih customer</option>${customerOptions}</select></div><div><label>No. nota</label><input name="invoice_number" required value="NJ-${String(Date.now()).slice(-6)}"></div><div><label>Tanggal jual</label><input type="date" name="sale_date" value="${new Date().toISOString().slice(0, 10)}"></div><div><label>Harga jual</label><input type="number" min="0" name="sale_price" required></div><div><label>Diskon</label><input type="number" min="0" name="discount" value="0"></div><div><label>Komisi sales</label><input type="number" min="0" name="commission" value="0"></div><div><label>Status pembayaran</label><select name="payment_status">${options(["unpaid", "partial", "paid"], "unpaid")}</select></div><div class="span-2"><label>Metode pembayaran / leasing</label><input name="payment_method"></div></div>`,
+    transaction: `<h2>Catat transaksi kas</h2><div class="form-grid"><div><label>Arus</label><select name="flow"><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option></select></div><div><label>Akun kas</label><select name="account_id"><option value="">Tanpa akun</option>${options(state.accounts, "", (a) => a.name)}</select></div><div><label>Tanggal</label><input type="date" name="transaction_date" value="${new Date().toISOString().slice(0, 10)}"></div><div><label>Kategori</label><input name="category" required></div><div><label>Nominal</label><input type="number" min="1" name="amount" required></div><div class="span-2"><label>Keterangan</label><textarea name="note"></textarea></div></div>`,
+  };
+  const modal = document.createElement("div");
+  modal.className = "modal-backdrop";
+  modal.innerHTML = `<section class="modal"><div class="modal-head">${forms[type]}<button class="icon-btn" data-close>×</button></div></section>`;
+  const title = modal.querySelector("h2");
+  const form = document.createElement("form");
+  form.className = "modal-body";
+  form.innerHTML =
+    title.parentElement.innerHTML.replace(title.outerHTML, "") +
+    `<div class="modal-foot"><button type="button" class="button secondary" data-close>Batal</button><button class="button">Simpan</button></div>`;
+  modal.querySelector(".modal").innerHTML = "";
+  modal.querySelector(".modal").append(form);
+  document.body.append(modal);
+  modal
+    .querySelectorAll("[data-close]")
+    .forEach((b) => (b.onclick = () => modal.remove()));
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.remove();
+  };
+  form.onsubmit = (e) => saveForm(e, type, data.id, modal);
+}
+async function saveForm(e, type, id, modal) {
+  e.preventDefault();
+  const raw = Object.fromEntries(new FormData(e.currentTarget));
+  Object.keys(raw).forEach((k) => {
+    if (raw[k] === "") raw[k] = null;
+  });
+  const numberFields = [
+    "year",
+    "purchase_price",
+    "target_price",
+    "amount",
+    "offered_price",
+    "sale_price",
+    "discount",
+    "commission",
+    "paid_amount",
+  ];
+  numberFields.forEach((k) => {
+    if (k in raw && raw[k] != null) raw[k] = Number(raw[k]);
+  });
+  const table = {
+    vehicle: "vehicles",
+    cost: "vehicle_costs",
+    customer: "customers",
+    lead: "leads",
+    sale: "sales",
+    transaction: "cash_transactions",
+  }[type];
+  raw.showroom_id = state.showroom.id;
+  if (type === "vehicle") {
+    delete raw.code;
+    if (state.showroom.business_type !== "both")
+      raw.vehicle_type = state.showroom.business_type;
+  }
+  const request = id
+    ? db.from(table).update(raw).eq("id", id)
+    : db.from(table).insert(raw);
+  const { error } = await request.select();
+  if (error) return toast(error.message, "error");
+  modal.remove();
+  await loadData();
+  renderShell();
+  toast("Data berhasil disimpan");
+}
+async function saveSettings() {
+  const row = {
+    name: document.querySelector("#setName").value,
+    city: document.querySelector("#setCity").value,
+    phone: document.querySelector("#setPhone").value,
+    address: document.querySelector("#setAddress").value,
+    business_type: document.querySelector("#setType").value,
+  };
+  const { data, error } = await db
+    .from("showrooms")
+    .update(row)
+    .eq("id", state.showroom.id)
+    .select()
+    .single();
+  if (error) return toast(error.message);
+  state.showroom = data;
+  renderShell();
+  toast("Pengaturan disimpan");
+}
+document.addEventListener(
+  "click",
+  (event) => {
+    if (event.target.matches("[data-close]")) event.preventDefault();
+  },
+  true,
+);
+db.auth.onAuthStateChange((_event, session) => {
+  if (!session && state.session) {
+    state.session = null;
+    renderAuth();
+  }
+});
+init();
 
 /* Garasi Pro UX v2 — mobile, theme, accounting and reversible transactions */
-const today=()=>new Date().toISOString().slice(0,10);
-let vehicleKind='all', financePeriod='all';
-const logo=(variant='mark')=>`<span class="bb-logo logo-bantuberes ${variant}" role="img" aria-label="Bantu Beres"></span>`;
-function setTheme(value){document.documentElement.dataset.theme=value;localStorage.setItem('garasi-pro-theme',value);document.querySelector('meta[name="theme-color"]').content=value==='dark'?'#11151d':'#592d91'}
-setTheme(localStorage.getItem('garasi-pro-theme')||'light');
-toast=function(msg,kind='success'){const el=document.querySelector('#toast');el.className=`toast-show ${kind}`;el.innerHTML=`<strong>${kind==='error'?'Perlu diperiksa':'Berhasil'}</strong><span>${esc(msg)}</span>`;clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>el.className='',3600)};
-const navV2=[['dashboard','Beranda','⌂'],['vehicles','Kendaraan','▣'],['sales','Penjualan','✓'],['finance','Keuangan','Rp'],['costs','Rekondisi','◇'],['customers','Customer','○'],['leads','Follow-up','↗'],['reports','Laporan','▤'],['settings','Pengaturan','⚙']];
-function gotoView(id){state.view=id;renderShell()}
-renderShell=function(){const user=state.session.user.user_metadata?.username||state.session.user.email.split('@')[0];app.innerHTML=`<div class="shell"><aside class="sidebar"><div class="side-brand">${logo()}<div><strong>Garasi Pro</strong><span>Bantu Beres</span></div></div><nav class="nav">${navV2.map(([id,n,i])=>`<button data-view="${id}" class="${state.view===id?'active':''}"><i>${i}</i>${n}</button>`).join('')}</nav><div class="sidebar-foot"><div class="user-chip">${esc(user)}</div><button class="logout-button" data-logout>Keluar akun</button></div></aside><main class="main"><header class="topbar"><div class="showroom-name">${esc(state.showroom.name)}<span>${state.showroom.business_type==='both'?'Showroom Mobil & Motor':state.showroom.business_type==='car'?'Showroom Mobil':'Showroom Motor'} · ${esc(state.showroom.city||'Belum ada kota')}</span></div><div class="top-actions"><button class="icon-btn" data-refresh aria-label="Muat ulang">↻</button><button class="icon-btn" data-theme aria-label="Ganti tema">${document.documentElement.dataset.theme==='dark'?'☀':'☾'}</button></div></header><section id="page" class="page"></section></main><nav class="mobile-nav">${navV2.slice(0,4).map(([id,n,i])=>`<button data-view="${id}" class="${state.view===id?'active':''}"><i>${i}</i><span>${n}</span></button>`).join('')}<button data-menu><i>•••</i><span>Menu</span></button></nav><div class="mobile-drawer" aria-hidden="true"><div class="drawer-head"><strong>Menu lainnya</strong><button class="icon-btn" data-menu-close>×</button></div>${navV2.slice(4).map(([id,n,i])=>`<button data-view="${id}"><i>${i}</i>${n}</button>`).join('')}<button class="drawer-logout" data-logout>Keluar akun</button></div><div class="drawer-shade" data-menu-close></div></div>`;
-document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>gotoView(b.dataset.view));document.querySelectorAll('[data-logout]').forEach(b=>b.onclick=async()=>{await db.auth.signOut();state={...state,session:null,showroom:null};renderAuth()});document.querySelector('[data-refresh]').onclick=async()=>{await loadData();renderPage();toast('Data berhasil diperbarui')};document.querySelector('[data-theme]').onclick=()=>{setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');renderShell()};const open=()=>document.querySelector('.shell').classList.add('drawer-open'),close=()=>document.querySelector('.shell').classList.remove('drawer-open');document.querySelector('[data-menu]').onclick=open;document.querySelectorAll('[data-menu-close]').forEach(x=>x.onclick=close);renderPage()};
-function mobileCards(rows,render){return `<div class="mobile-cards">${rows.length?rows.map(render).join(''):'<div class="empty">Belum ada data.</div>'}</div>`}
-function typeTabs(){if(state.showroom.business_type!=='both')return '';return `<div class="segment" id="kindFilter"><button data-kind="all" class="${vehicleKind==='all'?'active':''}">Semua</button><button data-kind="car" class="${vehicleKind==='car'?'active':''}">Mobil</button><button data-kind="motorcycle" class="${vehicleKind==='motorcycle'?'active':''}">Motor</button></div>`}
-vehicles=function(){const rows=state.vehicles.filter(v=>vehicleKind==='all'||v.vehicle_type===vehicleKind);return `${pageHead('Data Kendaraan','Stok dipisahkan per kategori dan selalu memakai kode unit berurutan.','<button class="button primary-action" data-modal="vehicle">+ Tambah kendaraan</button>')}<div class="toolbar">${typeTabs()}<div class="filter-row"><input id="vehicleSearch" placeholder="Cari kode, merek, model, atau nomor polisi"><select id="vehicleStatus"><option value="">Semua status</option>${['inspection','reconditioning','ready','listed','booked','sold','delivered'].map(s=>`<option value="${s}">${s.replaceAll('_',' ')}</option>`).join('')}</select></div></div><div class="panel data-panel" id="vehicleTable">${vehicleTable(rows)}</div>`}
-vehicleTable=function(rows){const desktop=rows.length?`<div class="table-wrap"><table class="data-table"><thead><tr><th>Unit</th><th>Jenis</th><th>Modal aktual</th><th>Target jual</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows.map(v=>vehicleRow(v)).join('')}</tbody></table></div>`:'<div class="empty">Tidak ada kendaraan yang sesuai.</div>';return desktop+mobileCards(rows,v=>{const total=vehicleHpp(v);return `<article class="data-card ${v.status==='sold'?'is-sold':''}"><div class="card-top"><div><small>${esc(v.code)}</small><h3>${esc(v.brand)} ${esc(v.model)}</h3></div>${status(v.status)}</div>${v.status==='sold'?'<div class="sold-banner">Produk sudah terjual</div>':''}<dl><div><dt>Jenis</dt><dd>${v.vehicle_type==='car'?'Mobil':'Motor'}</dd></div><div><dt>Modal</dt><dd>${rupiah(total)}</dd></div><div><dt>Target</dt><dd>${rupiah(v.target_price)}</dd></div></dl><button class="button secondary compact" data-edit-vehicle="${v.id}">Ubah data</button></article>`})}
-function vehicleHpp(v){return Number(v.purchase_price||0)+state.costs.filter(c=>c.vehicle_id===v.id).reduce((a,c)=>a+Number(c.amount||0),0)}
-function vehicleRow(v){return `<tr class="${v.status==='sold'?'sold-row':''}"><td><strong>${esc(v.brand)} ${esc(v.model)}</strong><br><small>${esc(v.code)} · ${v.year||'-'} · ${esc(v.license_plate||'-')}</small>${v.status==='sold'?'<span class="sold-note">Produk sudah terjual</span>':''}</td><td>${v.vehicle_type==='car'?'Mobil':'Motor'}</td><td>${rupiah(vehicleHpp(v))}</td><td>${rupiah(v.target_price)}</td><td>${status(v.status)}</td><td><button class="button secondary compact" data-edit-vehicle="${v.id}">Ubah</button></td></tr>`}
-sales=function(){return `${pageHead('Penjualan','Setiap penjualan otomatis memperbarui kendaraan dan kas.','<button class="button primary-action" data-modal="sale">+ Catat penjualan</button>')}<div class="panel data-panel">${salesTable()}</div>`}
-function salesTable(){const rows=state.sales;const desktop=`<div class="table-wrap"><table class="data-table"><thead><tr><th>Nota</th><th>Unit & customer</th><th>Nilai transaksi</th><th>Diterima</th><th>Laba</th><th>Aksi</th></tr></thead><tbody>${rows.map(s=>saleRow(s)).join('')||'<tr><td colspan="6"><div class="empty">Belum ada penjualan.</div></td></tr>'}</tbody></table></div>`;return desktop+mobileCards(rows,s=>{const m=saleMetrics(s);return `<article class="data-card"><div class="card-top"><div><small>${esc(s.invoice_number)}</small><h3>${esc(s.vehicles?`${s.vehicles.brand} ${s.vehicles.model}`:'Unit')}</h3></div>${status(s.payment_status)}</div><dl><div><dt>Harga bersih</dt><dd>${rupiah(m.net)}</dd></div><div><dt>Diterima</dt><dd>${rupiah(s.paid_amount)}</dd></div><div><dt>Laba</dt><dd class="${m.profit<0?'bad':'up'}">${rupiah(m.profit)}</dd></div></dl><div class="card-actions"><button class="button secondary compact" data-edit-sale="${s.id}">Ubah</button><button class="button danger compact" data-delete-sale="${s.id}">Hapus</button></div></article>`})}
-function saleMetrics(s){const v=state.vehicles.find(x=>x.id===s.vehicle_id),net=Number(s.sale_price||0)-Number(s.discount||0);return{net,profit:net-Number(s.commission||0)-(v?vehicleHpp(v):0),receivable:Math.max(0,net-Number(s.paid_amount||0))}}
-function saleRow(s){const m=saleMetrics(s);return `<tr><td><strong>${esc(s.invoice_number)}</strong><br><small>${s.sale_date}</small></td><td>${esc(s.vehicles?`${s.vehicles.brand} ${s.vehicles.model}`:'-')}<br><small>${esc(s.customers?.full_name||'-')}</small></td><td>${rupiah(m.net)}<br>${status(s.payment_status)}</td><td>${rupiah(s.paid_amount)}</td><td class="${m.profit<0?'bad':'up'}">${rupiah(m.profit)}</td><td><div class="row-actions"><button class="button secondary compact" data-edit-sale="${s.id}">Ubah</button><button class="button danger compact" data-delete-sale="${s.id}">Hapus</button></div></td></tr>`}
-finance=function(){const now=new Date(),filtered=state.transactions.filter(t=>financePeriod==='all'||String(t.transaction_date).slice(0,7)===financePeriod);const income=filtered.filter(t=>t.flow==='income').reduce((a,t)=>a+Number(t.amount),0),expense=filtered.filter(t=>t.flow==='expense').reduce((a,t)=>a+Number(t.amount),0),opening=state.accounts.reduce((a,x)=>a+Number(x.opening_balance||0),0),balance=financePeriod==='all'?opening+income-expense:income-expense;const months=[...new Set(state.transactions.map(t=>String(t.transaction_date).slice(0,7)))].sort().reverse();return `${pageHead('Keuangan','Kas berbasis uang aktual; laba dan piutang dihitung terpisah.','<button class="button primary-action" data-modal="transaction">+ Transaksi manual</button>')}<div class="period-bar"><label>Periode laporan</label><select id="financePeriod"><option value="all">Keseluruhan</option>${months.map(m=>`<option value="${m}" ${m===financePeriod?'selected':''}>${new Date(m+'-01').toLocaleDateString('id-ID',{month:'long',year:'numeric'})}</option>`).join('')}</select></div><div class="metric-grid"><div class="metric"><div class="label">${financePeriod==='all'?'SALDO KAS':'PERUBAHAN KAS'}</div><div class="value ${balance<0?'bad':''}">${rupiah(balance)}</div><div class="meta">${financePeriod==='all'?'Saldo awal + seluruh arus kas':'Masuk dikurangi keluar pada periode'}</div></div><div class="metric"><div class="label">PEMASUKAN</div><div class="value up">${rupiah(income)}</div><div class="meta">Termasuk pembayaran penjualan</div></div><div class="metric"><div class="label">PENGELUARAN</div><div class="value bad">${rupiah(expense)}</div><div class="meta">Pembelian, rekondisi, dan biaya lain</div></div><div class="metric"><div class="label">PIUTANG PENJUALAN</div><div class="value warn">${rupiah(state.sales.reduce((a,s)=>a+saleMetrics(s).receivable,0))}</div><div class="meta">Belum dihitung sebagai kas</div></div></div><div class="accounting-note"><strong>Aturan perhitungan</strong><span>Kas = saldo awal + uang masuk − uang keluar. Laba = harga jual bersih − harga beli − rekondisi − komisi. Piutang dipisahkan sampai benar-benar dibayar.</span></div><div class="panel data-panel">${transactionTable(filtered)}</div>`}
-function transactionTable(rows){const body=rows.map(t=>`<tr><td>${t.transaction_date}</td><td class="${t.flow==='income'?'up':'bad'}">${t.flow==='income'?'Masuk':'Keluar'}</td><td>${esc(t.category)}</td><td>${esc(t.note||'-')} ${t.is_system?'<span class="system-tag">Otomatis</span>':''}</td><td>${rupiah(t.amount)}</td><td>${t.is_system?'—':`<div class="row-actions"><button class="button secondary compact" data-edit-transaction="${t.id}">Ubah</button><button class="button danger compact" data-delete-transaction="${t.id}">Hapus</button></div>`}</td></tr>`).join('');return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Tanggal</th><th>Arus</th><th>Kategori</th><th>Keterangan</th><th>Nominal</th><th>Aksi</th></tr></thead><tbody>${body||'<tr><td colspan="6"><div class="empty">Belum ada transaksi pada periode ini.</div></td></tr>'}</tbody></table></div>`+mobileCards(rows,t=>`<article class="data-card"><div class="card-top"><div><small>${t.transaction_date}</small><h3>${esc(t.category)}</h3></div><strong class="${t.flow==='income'?'up':'bad'}">${t.flow==='income'?'+':'−'} ${rupiah(t.amount)}</strong></div><p>${esc(t.note||'-')} ${t.is_system?'<span class="system-tag">Otomatis</span>':''}</p>${t.is_system?'':`<div class="card-actions"><button class="button secondary compact" data-edit-transaction="${t.id}">Ubah</button><button class="button danger compact" data-delete-transaction="${t.id}">Hapus</button></div>`}</article>`)}
-const originalBindPage=bindPage;
-bindPage=function(){originalBindPage();document.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{vehicleKind=b.dataset.kind;renderPage()});document.querySelector('#financePeriod')?.addEventListener('change',e=>{financePeriod=e.target.value;renderPage()});document.querySelectorAll('[data-edit-sale]').forEach(b=>b.onclick=()=>openModalV2('sale',state.sales.find(s=>s.id===b.dataset.editSale)));document.querySelectorAll('[data-delete-sale]').forEach(b=>b.onclick=()=>confirmAction('Hapus transaksi penjualan?','Kendaraan akan kembali ke status sebelumnya dan catatan kas terkait akan dibalik.',()=>deleteRecord('sales',b.dataset.deleteSale)));document.querySelectorAll('[data-edit-transaction]').forEach(b=>b.onclick=()=>openModalV2('transaction',state.transactions.find(t=>t.id===b.dataset.editTransaction)));document.querySelectorAll('[data-delete-transaction]').forEach(b=>b.onclick=()=>confirmAction('Hapus transaksi kas?','Saldo kas akan dihitung ulang tanpa transaksi ini.',()=>deleteRecord('cash_transactions',b.dataset.deleteTransaction)));document.querySelectorAll('[data-modal]').forEach(b=>b.onclick=()=>openModalV2(b.dataset.modal));document.querySelectorAll('[data-edit-vehicle]').forEach(b=>b.onclick=()=>openModalV2('vehicle',state.vehicles.find(v=>v.id===b.dataset.editVehicle)));};
-async function deleteRecord(table,id){const {error}=await db.from(table).delete().eq('id',id);if(error)return toast(error.message,'error');await loadData();renderShell();toast('Data dihapus dan perhitungan diperbarui')}
-function confirmAction(title,message,onConfirm){const root=document.querySelector('#confirmRoot');root.innerHTML=`<div class="modal-backdrop confirm-backdrop"><section class="confirm-box"><div class="confirm-icon">!</div><h2>${esc(title)}</h2><p>${esc(message)}</p><div class="modal-foot"><button class="button secondary" data-cancel>Batal</button><button class="button danger" data-confirm>Ya, hapus</button></div></section></div>`;root.querySelector('[data-cancel]').onclick=()=>root.innerHTML='';root.querySelector('[data-confirm]').onclick=async()=>{root.innerHTML='';await onConfirm()}}
-function fieldSelect(name,label,items,value='',other=true){return `<div><label>${label}</label><select name="${name}" data-other-select="${other?'1':'0'}">${items.map(x=>{const val=Array.isArray(x)?x[0]:x,txt=Array.isArray(x)?x[1]:x;return `<option value="${esc(val)}" ${val===value?'selected':''}>${esc(txt)}</option>`}).join('')}${other?'<option value="__other">Lainnya…</option>':''}</select><input class="other-input" data-other-for="${name}" placeholder="Tulis pilihan lainnya" hidden></div>`}
-function openModalV2(type,data={}){const active=state.vehicles.filter(v=>!['sold','delivered','cancelled'].includes(v.status)||v.id===data.vehicle_id),vehicleOpts=active.map(v=>`<option value="${v.id}" ${v.id===data.vehicle_id?'selected':''}>${esc(v.code)} — ${esc(v.brand)} ${esc(v.model)}</option>`).join(''),customerOpts=state.customers.map(c=>`<option value="${c.id}" ${c.id===data.customer_id?'selected':''}>${esc(c.full_name)}</option>`).join('');let title='',subtitle='',body='';
-if(type==='vehicle'){title=data.id?'Ubah kendaraan':'Tambah kendaraan';subtitle='Kode unit dibuat otomatis dan berurutan setelah disimpan.';const kinds=state.showroom.business_type==='both'?fieldSelect('vehicle_type','Jenis kendaraan',[['car','Mobil'],['motorcycle','Motor']],data.vehicle_type||'car',false):`<input type="hidden" name="vehicle_type" value="${state.showroom.business_type}">`;body=`<div class="form-grid"><div><label>Kode unit</label><input value="${esc(data.code||'Otomatis saat disimpan')}" readonly class="readonly"></div>${kinds}<div><label>Merek</label><input name="brand" required value="${esc(data.brand||'')}"></div><div><label>Model / tipe</label><input name="model" required value="${esc(data.model||'')}"></div><div><label>Tahun</label><input type="number" name="year" min="1900" max="2100" value="${data.year||''}"></div><div><label>Nomor polisi</label><input name="license_plate" value="${esc(data.license_plate||'')}"></div>${fieldSelect('transmission','Transmisi',[['Manual','Manual'],['Automatic','Automatic'],['CVT','CVT']],data.transmission||'')}${fieldSelect('fuel_type','Bahan bakar',[['Bensin','Bensin'],['Diesel','Diesel'],['Hybrid','Hybrid'],['Listrik','Listrik']],data.fuel_type||'')}<div><label>Harga beli</label><input type="number" min="0" name="purchase_price" required value="${data.purchase_price||0}"></div><div><label>Target jual</label><input type="number" min="0" name="target_price" value="${data.target_price||0}"></div><div><label>Tanggal beli</label><input type="date" name="purchase_date" value="${data.purchase_date||today()}"></div>${fieldSelect('status','Status unit',[['inspection','Inspeksi'],['reconditioning','Rekondisi'],['ready','Siap jual'],['listed','Diiklankan'],['booked','Dipesan']],data.status||'inspection',false)}<div class="span-2"><label>Catatan</label><textarea name="description">${esc(data.description||'')}</textarea></div></div>`}
-if(type==='sale'){title=data.id?'Ubah penjualan':'Catat penjualan';subtitle='Kas hanya bertambah sebesar uang yang benar-benar diterima.';body=`<div class="form-grid"><div><label>Unit terjual</label><select name="vehicle_id" required><option value="">Pilih unit</option>${vehicleOpts}</select></div><div><label>Customer</label><select name="customer_id"><option value="">Tanpa customer</option>${customerOpts}</select></div><div><label>Nomor nota</label><input name="invoice_number" required value="${esc(data.invoice_number||`NJ-${String(Date.now()).slice(-6)}`)}"></div><div><label>Tanggal jual</label><input type="date" name="sale_date" value="${data.sale_date||today()}"></div><div><label>Harga jual</label><input type="number" min="0" name="sale_price" required value="${data.sale_price||0}"></div><div><label>Diskon</label><input type="number" min="0" name="discount" value="${data.discount||0}"></div><div><label>Komisi</label><input type="number" min="0" name="commission" value="${data.commission||0}"></div>${fieldSelect('payment_status','Status pembayaran',[['unpaid','Belum dibayar'],['partial','Dibayar sebagian'],['paid','Lunas']],data.payment_status||'unpaid',false)}<div><label>Uang diterima</label><input type="number" min="0" name="paid_amount" value="${data.paid_amount||0}"></div>${fieldSelect('payment_method','Metode pembayaran',[['Tunai','Tunai'],['Transfer','Transfer'],['Leasing','Leasing']],data.payment_method||'')}<div class="span-2"><label>Catatan transaksi</label><textarea name="note">${esc(data.note||'')}</textarea></div></div>`}
-if(type==='transaction'){title=data.id?'Ubah transaksi manual':'Tambah transaksi manual';subtitle='Transaksi otomatis dari kendaraan, rekondisi, dan penjualan tidak dapat diubah di sini.';body=`<div class="form-grid">${fieldSelect('flow','Arus kas',[['income','Pemasukan'],['expense','Pengeluaran']],data.flow||'expense',false)}<div><label>Akun kas</label><select name="account_id"><option value="">Kas utama otomatis</option>${state.accounts.map(a=>`<option value="${a.id}" ${a.id===data.account_id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div><div><label>Tanggal</label><input type="date" name="transaction_date" value="${data.transaction_date||today()}"></div>${fieldSelect('category','Kategori',[['Operasional','Operasional'],['Modal pemilik','Modal pemilik'],['Penarikan pemilik','Penarikan pemilik'],['Pendapatan lain','Pendapatan lain']],data.category||'')}<div><label>Nominal</label><input type="number" min="1" name="amount" required value="${data.amount||''}"></div><div class="span-2"><label>Keterangan</label><textarea name="note">${esc(data.note||'')}</textarea></div></div>`}
-if(!body)return openModal(type,data);const backdrop=document.createElement('div');backdrop.className='modal-backdrop';backdrop.innerHTML=`<section class="modal"><header class="modal-title"><div><h2>${title}</h2><p>${subtitle}</p></div><button type="button" class="modal-close" aria-label="Tutup">×</button></header><form class="modal-body">${body}<footer class="modal-foot"><button type="button" class="button secondary" data-close>Batal</button><button class="button" type="submit">Simpan</button></footer></form></section>`;document.body.append(backdrop);requestAnimationFrame(()=>backdrop.classList.add('visible'));const close=()=>{backdrop.classList.remove('visible');setTimeout(()=>backdrop.remove(),180)};backdrop.querySelector('.modal-close').onclick=close;backdrop.querySelector('[data-close]').onclick=close;backdrop.onclick=e=>{if(e.target===backdrop)close()};backdrop.querySelectorAll('[data-other-select="1"]').forEach(s=>s.onchange=()=>{const i=backdrop.querySelector(`[data-other-for="${s.name}"]`);i.hidden=s.value!=='__other';if(!i.hidden)i.focus()});backdrop.querySelector('form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget;form.querySelectorAll('[data-other-select="1"]').forEach(s=>{if(s.value==='__other')s.value=form.querySelector(`[data-other-for="${s.name}"]`).value});const submit=form.querySelector('[type="submit"]');submit.disabled=true;submit.textContent='Menyimpan…';await saveForm(e,type,data.id,backdrop);if(document.body.contains(backdrop)){submit.disabled=false;submit.textContent='Simpan'}}}
+const today = () => new Date().toISOString().slice(0, 10);
+let vehicleKind = "all",
+  financePeriod = "all";
+const logo = (variant = "mark") =>
+  `<span class="bb-logo logo-bantuberes ${variant}" role="img" aria-label="Bantu Beres"></span>`;
+function setTheme(value) {
+  document.documentElement.dataset.theme = value;
+  localStorage.setItem("garasi-pro-theme", value);
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta) themeMeta.content = value === "dark" ? "#11151d" : "#592d91";
+}
+setTheme(localStorage.getItem("garasi-pro-theme") || "light");
+toast = function (msg, kind = "success") {
+  const el = document.querySelector("#toast");
+  el.className = `toast-show ${kind}`;
+  el.innerHTML = `<strong>${kind === "error" ? "Perlu diperiksa" : "Berhasil"}</strong><span>${esc(msg)}</span>`;
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(() => (el.className = ""), 3600);
+};
+const navV2 = [
+  ["dashboard", "Beranda", "⌂"],
+  ["vehicles", "Kendaraan", "▣"],
+  ["sales", "Penjualan", "✓"],
+  ["finance", "Keuangan", "Rp"],
+  ["costs", "Rekondisi", "◇"],
+  ["customers", "Customer", "○"],
+  ["leads", "Follow-up", "↗"],
+  ["reports", "Laporan", "▤"],
+  ["settings", "Pengaturan", "⚙"],
+];
+function gotoView(id) {
+  state.view = id;
+  renderShell();
+}
+renderShell = function () {
+  const user =
+    state.session.user.user_metadata?.username ||
+    state.session.user.email.split("@")[0];
+  app.innerHTML = `<div class="shell"><aside class="sidebar"><div class="side-brand">${logo()}<div><strong>Garasi Pro</strong><span>Bantu Beres</span></div></div><nav class="nav">${navV2.map(([id, n, i]) => `<button data-view="${id}" class="${state.view === id ? "active" : ""}"><i>${i}</i>${n}</button>`).join("")}</nav><div class="sidebar-foot"><div class="user-chip">${esc(user)}</div><button class="logout-button" data-logout>Keluar akun</button></div></aside><main class="main"><header class="topbar"><div class="showroom-name">${esc(state.showroom.name)}<span>${state.showroom.business_type === "both" ? "Showroom Mobil & Motor" : state.showroom.business_type === "car" ? "Showroom Mobil" : "Showroom Motor"} · ${esc(state.showroom.city || "Belum ada kota")}</span></div><div class="top-actions"><button class="icon-btn" data-refresh aria-label="Muat ulang">↻</button><button class="icon-btn" data-theme aria-label="Ganti tema">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button></div></header><section id="page" class="page"></section></main><nav class="mobile-nav">${navV2
+    .slice(0, 4)
+    .map(
+      ([id, n, i]) =>
+        `<button data-view="${id}" class="${state.view === id ? "active" : ""}"><i>${i}</i><span>${n}</span></button>`,
+    )
+    .join(
+      "",
+    )}<button data-menu><i>•••</i><span>Menu</span></button></nav><div class="mobile-drawer" aria-hidden="true"><div class="drawer-head"><strong>Menu lainnya</strong><button class="icon-btn" data-menu-close>×</button></div>${navV2
+    .slice(4)
+    .map(([id, n, i]) => `<button data-view="${id}"><i>${i}</i>${n}</button>`)
+    .join(
+      "",
+    )}<button class="drawer-logout" data-logout>Keluar akun</button></div><div class="drawer-shade" data-menu-close></div></div>`;
+  document
+    .querySelectorAll("[data-view]")
+    .forEach((b) => (b.onclick = () => gotoView(b.dataset.view)));
+  document.querySelectorAll("[data-logout]").forEach(
+    (b) =>
+      (b.onclick = async () => {
+        await db.auth.signOut();
+        state = { ...state, session: null, showroom: null };
+        renderAuth();
+      }),
+  );
+  document.querySelector("[data-refresh]").onclick = async () => {
+    await loadData();
+    renderPage();
+    toast("Data berhasil diperbarui");
+  };
+  document.querySelector("[data-theme]").onclick = () => {
+    setTheme(
+      document.documentElement.dataset.theme === "dark" ? "light" : "dark",
+    );
+    renderShell();
+  };
+  const open = () =>
+      document.querySelector(".shell").classList.add("drawer-open"),
+    close = () =>
+      document.querySelector(".shell").classList.remove("drawer-open");
+  document.querySelector("[data-menu]").onclick = open;
+  document
+    .querySelectorAll("[data-menu-close]")
+    .forEach((x) => (x.onclick = close));
+  renderPage();
+};
+// Gunakan satu shell final secara sinkron. Jangan menimpa renderer melalui timer.
+renderShell = renderShellMobileV3;
+function mobileCards(rows, render) {
+  return `<div class="mobile-cards">${rows.length ? rows.map(render).join("") : '<div class="empty">Belum ada data.</div>'}</div>`;
+}
+function typeTabs() {
+  if (state.showroom.business_type !== "both") return "";
+  return `<div class="segment" id="kindFilter"><button data-kind="all" class="${vehicleKind === "all" ? "active" : ""}">Semua</button><button data-kind="car" class="${vehicleKind === "car" ? "active" : ""}">Mobil</button><button data-kind="motorcycle" class="${vehicleKind === "motorcycle" ? "active" : ""}">Motor</button></div>`;
+}
+vehicles = function () {
+  const rows = state.vehicles.filter(
+    (v) => vehicleKind === "all" || v.vehicle_type === vehicleKind,
+  );
+  return `${pageHead("Data Kendaraan", "Stok dipisahkan per kategori dan selalu memakai kode unit berurutan.", '<button class="button primary-action" data-modal="vehicle">+ Tambah kendaraan</button>')}<div class="toolbar">${typeTabs()}<div class="filter-row"><input id="vehicleSearch" placeholder="Cari kode, merek, model, atau nomor polisi"><select id="vehicleStatus"><option value="">Semua status</option>${["inspection", "reconditioning", "ready", "listed", "booked", "sold", "delivered"].map((s) => `<option value="${s}">${s.replaceAll("_", " ")}</option>`).join("")}</select></div></div><div class="panel data-panel" id="vehicleTable">${vehicleTable(rows)}</div>`;
+};
+vehicleTable = function (rows) {
+  const desktop = rows.length
+    ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Unit</th><th>Jenis</th><th>Modal aktual</th><th>Target jual</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows.map((v) => vehicleRow(v)).join("")}</tbody></table></div>`
+    : '<div class="empty">Tidak ada kendaraan yang sesuai.</div>';
+  return (
+    desktop +
+    mobileCards(rows, (v) => {
+      const total = vehicleHpp(v);
+      return `<article class="data-card ${v.status === "sold" ? "is-sold" : ""}"><div class="card-top"><div><small>${esc(v.code)}</small><h3>${esc(v.brand)} ${esc(v.model)}</h3></div>${status(v.status)}</div>${v.status === "sold" ? '<div class="sold-banner">Produk sudah terjual</div>' : ""}<dl><div><dt>Jenis</dt><dd>${v.vehicle_type === "car" ? "Mobil" : "Motor"}</dd></div><div><dt>Modal</dt><dd>${rupiah(total)}</dd></div><div><dt>Target</dt><dd>${rupiah(v.target_price)}</dd></div></dl><button class="button secondary compact" data-edit-vehicle="${v.id}">Ubah data</button></article>`;
+    })
+  );
+};
+function vehicleHpp(v) {
+  return (
+    Number(v.purchase_price || 0) +
+    state.costs
+      .filter((c) => c.vehicle_id === v.id)
+      .reduce((a, c) => a + Number(c.amount || 0), 0)
+  );
+}
+function vehicleRow(v) {
+  return `<tr class="${v.status === "sold" ? "sold-row" : ""}"><td><strong>${esc(v.brand)} ${esc(v.model)}</strong><br><small>${esc(v.code)} · ${v.year || "-"} · ${esc(v.license_plate || "-")}</small>${v.status === "sold" ? '<span class="sold-note">Produk sudah terjual</span>' : ""}</td><td>${v.vehicle_type === "car" ? "Mobil" : "Motor"}</td><td>${rupiah(vehicleHpp(v))}</td><td>${rupiah(v.target_price)}</td><td>${status(v.status)}</td><td><button class="button secondary compact" data-edit-vehicle="${v.id}">Ubah</button></td></tr>`;
+}
+sales = function () {
+  return `${pageHead("Penjualan", "Setiap penjualan otomatis memperbarui kendaraan dan kas.", '<button class="button primary-action" data-modal="sale">+ Catat penjualan</button>')}<div class="panel data-panel">${salesTable()}</div>`;
+};
+function salesTable() {
+  const rows = state.sales;
+  const desktop = `<div class="table-wrap"><table class="data-table"><thead><tr><th>Nota</th><th>Unit & customer</th><th>Nilai transaksi</th><th>Diterima</th><th>Laba</th><th>Aksi</th></tr></thead><tbody>${rows.map((s) => saleRow(s)).join("") || '<tr><td colspan="6"><div class="empty">Belum ada penjualan.</div></td></tr>'}</tbody></table></div>`;
+  return (
+    desktop +
+    mobileCards(rows, (s) => {
+      const m = saleMetrics(s);
+      return `<article class="data-card"><div class="card-top"><div><small>${esc(s.invoice_number)}</small><h3>${esc(s.vehicles ? `${s.vehicles.brand} ${s.vehicles.model}` : "Unit")}</h3></div>${status(s.payment_status)}</div><dl><div><dt>Harga bersih</dt><dd>${rupiah(m.net)}</dd></div><div><dt>Diterima</dt><dd>${rupiah(s.paid_amount)}</dd></div><div><dt>Laba</dt><dd class="${m.profit < 0 ? "bad" : "up"}">${rupiah(m.profit)}</dd></div></dl><div class="card-actions"><button class="button secondary compact" data-edit-sale="${s.id}">Ubah</button><button class="button danger compact" data-delete-sale="${s.id}">Hapus</button></div></article>`;
+    })
+  );
+}
+function saleMetrics(s) {
+  const v = state.vehicles.find((x) => x.id === s.vehicle_id),
+    net = Number(s.sale_price || 0) - Number(s.discount || 0);
+  return {
+    net,
+    profit: net - Number(s.commission || 0) - (v ? vehicleHpp(v) : 0),
+    receivable: Math.max(0, net - Number(s.paid_amount || 0)),
+  };
+}
+function saleRow(s) {
+  const m = saleMetrics(s);
+  return `<tr><td><strong>${esc(s.invoice_number)}</strong><br><small>${s.sale_date}</small></td><td>${esc(s.vehicles ? `${s.vehicles.brand} ${s.vehicles.model}` : "-")}<br><small>${esc(s.customers?.full_name || "-")}</small></td><td>${rupiah(m.net)}<br>${status(s.payment_status)}</td><td>${rupiah(s.paid_amount)}</td><td class="${m.profit < 0 ? "bad" : "up"}">${rupiah(m.profit)}</td><td><div class="row-actions"><button class="button secondary compact" data-edit-sale="${s.id}">Ubah</button><button class="button danger compact" data-delete-sale="${s.id}">Hapus</button></div></td></tr>`;
+}
+finance = function () {
+  const now = new Date(),
+    filtered = state.transactions.filter(
+      (t) =>
+        financePeriod === "all" ||
+        String(t.transaction_date).slice(0, 7) === financePeriod,
+    );
+  const income = filtered
+      .filter((t) => t.flow === "income")
+      .reduce((a, t) => a + Number(t.amount), 0),
+    expense = filtered
+      .filter((t) => t.flow === "expense")
+      .reduce((a, t) => a + Number(t.amount), 0),
+    opening = state.accounts.reduce(
+      (a, x) => a + Number(x.opening_balance || 0),
+      0,
+    ),
+    balance =
+      financePeriod === "all" ? opening + income - expense : income - expense;
+  const months = [
+    ...new Set(
+      state.transactions.map((t) => String(t.transaction_date).slice(0, 7)),
+    ),
+  ]
+    .sort()
+    .reverse();
+  return `${pageHead("Keuangan", "Kas berbasis uang aktual; laba dan piutang dihitung terpisah.", '<button class="button primary-action" data-modal="transaction">+ Transaksi manual</button>')}<div class="period-bar"><label>Periode laporan</label><select id="financePeriod"><option value="all">Keseluruhan</option>${months.map((m) => `<option value="${m}" ${m === financePeriod ? "selected" : ""}>${new Date(m + "-01").toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</option>`).join("")}</select></div><div class="metric-grid"><div class="metric"><div class="label">${financePeriod === "all" ? "SALDO KAS" : "PERUBAHAN KAS"}</div><div class="value ${balance < 0 ? "bad" : ""}">${rupiah(balance)}</div><div class="meta">${financePeriod === "all" ? "Saldo awal + seluruh arus kas" : "Masuk dikurangi keluar pada periode"}</div></div><div class="metric"><div class="label">PEMASUKAN</div><div class="value up">${rupiah(income)}</div><div class="meta">Termasuk pembayaran penjualan</div></div><div class="metric"><div class="label">PENGELUARAN</div><div class="value bad">${rupiah(expense)}</div><div class="meta">Pembelian, rekondisi, dan biaya lain</div></div><div class="metric"><div class="label">PIUTANG PENJUALAN</div><div class="value warn">${rupiah(state.sales.reduce((a, s) => a + saleMetrics(s).receivable, 0))}</div><div class="meta">Belum dihitung sebagai kas</div></div></div><div class="accounting-note"><strong>Aturan perhitungan</strong><span>Kas = saldo awal + uang masuk − uang keluar. Laba = harga jual bersih − harga beli − rekondisi − komisi. Piutang dipisahkan sampai benar-benar dibayar.</span></div><div class="panel data-panel">${transactionTable(filtered)}</div>`;
+};
+function transactionTable(rows) {
+  const body = rows
+    .map(
+      (t) =>
+        `<tr><td>${t.transaction_date}</td><td class="${t.flow === "income" ? "up" : "bad"}">${t.flow === "income" ? "Masuk" : "Keluar"}</td><td>${esc(t.category)}</td><td>${esc(t.note || "-")} ${t.is_system ? '<span class="system-tag">Otomatis</span>' : ""}</td><td>${rupiah(t.amount)}</td><td>${t.is_system ? "—" : `<div class="row-actions"><button class="button secondary compact" data-edit-transaction="${t.id}">Ubah</button><button class="button danger compact" data-delete-transaction="${t.id}">Hapus</button></div>`}</td></tr>`,
+    )
+    .join("");
+  return (
+    `<div class="table-wrap"><table class="data-table"><thead><tr><th>Tanggal</th><th>Arus</th><th>Kategori</th><th>Keterangan</th><th>Nominal</th><th>Aksi</th></tr></thead><tbody>${body || '<tr><td colspan="6"><div class="empty">Belum ada transaksi pada periode ini.</div></td></tr>'}</tbody></table></div>` +
+    mobileCards(
+      rows,
+      (t) =>
+        `<article class="data-card"><div class="card-top"><div><small>${t.transaction_date}</small><h3>${esc(t.category)}</h3></div><strong class="${t.flow === "income" ? "up" : "bad"}">${t.flow === "income" ? "+" : "−"} ${rupiah(t.amount)}</strong></div><p>${esc(t.note || "-")} ${t.is_system ? '<span class="system-tag">Otomatis</span>' : ""}</p>${t.is_system ? "" : `<div class="card-actions"><button class="button secondary compact" data-edit-transaction="${t.id}">Ubah</button><button class="button danger compact" data-delete-transaction="${t.id}">Hapus</button></div>`}</article>`,
+    )
+  );
+}
+const originalBindPage = bindPage;
+bindPage = function () {
+  originalBindPage();
+  document.querySelectorAll("[data-kind]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        vehicleKind = b.dataset.kind;
+        renderPage();
+      }),
+  );
+  document.querySelector("#financePeriod")?.addEventListener("change", (e) => {
+    financePeriod = e.target.value;
+    renderPage();
+  });
+  document.querySelectorAll("[data-edit-sale]").forEach(
+    (b) =>
+      (b.onclick = () =>
+        openModalV2(
+          "sale",
+          state.sales.find((s) => s.id === b.dataset.editSale),
+        )),
+  );
+  document
+    .querySelectorAll("[data-delete-sale]")
+    .forEach(
+      (b) =>
+        (b.onclick = () =>
+          confirmAction(
+            "Hapus transaksi penjualan?",
+            "Kendaraan akan kembali ke status sebelumnya dan catatan kas terkait akan dibalik.",
+            () => deleteRecord("sales", b.dataset.deleteSale),
+          )),
+    );
+  document.querySelectorAll("[data-edit-transaction]").forEach(
+    (b) =>
+      (b.onclick = () =>
+        openModalV2(
+          "transaction",
+          state.transactions.find((t) => t.id === b.dataset.editTransaction),
+        )),
+  );
+  document
+    .querySelectorAll("[data-delete-transaction]")
+    .forEach(
+      (b) =>
+        (b.onclick = () =>
+          confirmAction(
+            "Hapus transaksi kas?",
+            "Saldo kas akan dihitung ulang tanpa transaksi ini.",
+            () =>
+              deleteRecord("cash_transactions", b.dataset.deleteTransaction),
+          )),
+    );
+  document
+    .querySelectorAll("[data-modal]")
+    .forEach((b) => (b.onclick = () => openModalV2(b.dataset.modal)));
+  document.querySelectorAll("[data-edit-vehicle]").forEach(
+    (b) =>
+      (b.onclick = () =>
+        openModalV2(
+          "vehicle",
+          state.vehicles.find((v) => v.id === b.dataset.editVehicle),
+        )),
+  );
+};
+async function deleteRecord(table, id) {
+  const { error } = await db.from(table).delete().eq("id", id);
+  if (error) return toast(error.message, "error");
+  await loadData();
+  renderShell();
+  toast("Data dihapus dan perhitungan diperbarui");
+}
+function confirmAction(title, message, onConfirm) {
+  const root = document.querySelector("#confirmRoot");
+  root.innerHTML = `<div class="modal-backdrop confirm-backdrop"><section class="confirm-box"><div class="confirm-icon">!</div><h2>${esc(title)}</h2><p>${esc(message)}</p><div class="modal-foot"><button class="button secondary" data-cancel>Batal</button><button class="button danger" data-confirm>Ya, hapus</button></div></section></div>`;
+  root.querySelector("[data-cancel]").onclick = () => (root.innerHTML = "");
+  root.querySelector("[data-confirm]").onclick = async () => {
+    root.innerHTML = "";
+    await onConfirm();
+  };
+}
+function fieldSelect(name, label, items, value = "", other = true) {
+  return `<div><label>${label}</label><select name="${name}" data-other-select="${other ? "1" : "0"}">${items
+    .map((x) => {
+      const val = Array.isArray(x) ? x[0] : x,
+        txt = Array.isArray(x) ? x[1] : x;
+      return `<option value="${esc(val)}" ${val === value ? "selected" : ""}>${esc(txt)}</option>`;
+    })
+    .join(
+      "",
+    )}${other ? '<option value="__other">Lainnya…</option>' : ""}</select><input class="other-input" data-other-for="${name}" placeholder="Tulis pilihan lainnya" hidden></div>`;
+}
+function openModalV2(type, data = {}) {
+  const active = state.vehicles.filter(
+      (v) =>
+        !["sold", "delivered", "cancelled"].includes(v.status) ||
+        v.id === data.vehicle_id,
+    ),
+    vehicleOpts = active
+      .map(
+        (v) =>
+          `<option value="${v.id}" ${v.id === data.vehicle_id ? "selected" : ""}>${esc(v.code)} — ${esc(v.brand)} ${esc(v.model)}</option>`,
+      )
+      .join(""),
+    customerOpts = state.customers
+      .map(
+        (c) =>
+          `<option value="${c.id}" ${c.id === data.customer_id ? "selected" : ""}>${esc(c.full_name)}</option>`,
+      )
+      .join("");
+  let title = "",
+    subtitle = "",
+    body = "";
+  if (type === "vehicle") {
+    title = data.id ? "Ubah kendaraan" : "Tambah kendaraan";
+    subtitle = "Kode unit dibuat otomatis dan berurutan setelah disimpan.";
+    const kinds =
+      state.showroom.business_type === "both"
+        ? fieldSelect(
+            "vehicle_type",
+            "Jenis kendaraan",
+            [
+              ["car", "Mobil"],
+              ["motorcycle", "Motor"],
+            ],
+            data.vehicle_type || "car",
+            false,
+          )
+        : `<input type="hidden" name="vehicle_type" value="${state.showroom.business_type}">`;
+    body = `<div class="form-grid"><div><label>Kode unit</label><input value="${esc(data.code || "Otomatis saat disimpan")}" readonly class="readonly"></div>${kinds}<div><label>Merek</label><input name="brand" required value="${esc(data.brand || "")}"></div><div><label>Model / tipe</label><input name="model" required value="${esc(data.model || "")}"></div><div><label>Tahun</label><input type="number" name="year" min="1900" max="2100" value="${data.year || ""}"></div><div><label>Nomor polisi</label><input name="license_plate" value="${esc(data.license_plate || "")}"></div>${fieldSelect(
+      "transmission",
+      "Transmisi",
+      [
+        ["Manual", "Manual"],
+        ["Automatic", "Automatic"],
+        ["CVT", "CVT"],
+      ],
+      data.transmission || "",
+    )}${fieldSelect(
+      "fuel_type",
+      "Bahan bakar",
+      [
+        ["Bensin", "Bensin"],
+        ["Diesel", "Diesel"],
+        ["Hybrid", "Hybrid"],
+        ["Listrik", "Listrik"],
+      ],
+      data.fuel_type || "",
+    )}<div><label>Harga beli</label><input type="number" min="0" name="purchase_price" required value="${data.purchase_price || 0}"></div><div><label>Target jual</label><input type="number" min="0" name="target_price" value="${data.target_price || 0}"></div><div><label>Tanggal beli</label><input type="date" name="purchase_date" value="${data.purchase_date || today()}"></div>${fieldSelect(
+      "status",
+      "Status unit",
+      [
+        ["inspection", "Inspeksi"],
+        ["reconditioning", "Rekondisi"],
+        ["ready", "Siap jual"],
+        ["listed", "Diiklankan"],
+        ["booked", "Dipesan"],
+      ],
+      data.status || "inspection",
+      false,
+    )}<div class="span-2"><label>Catatan</label><textarea name="description">${esc(data.description || "")}</textarea></div></div>`;
+  }
+  if (type === "sale") {
+    title = data.id ? "Ubah penjualan" : "Catat penjualan";
+    subtitle = "Kas hanya bertambah sebesar uang yang benar-benar diterima.";
+    body = `<div class="form-grid"><div><label>Unit terjual</label><select name="vehicle_id" required><option value="">Pilih unit</option>${vehicleOpts}</select></div><div><label>Customer</label><select name="customer_id"><option value="">Tanpa customer</option>${customerOpts}</select></div><div><label>Nomor nota</label><input name="invoice_number" required value="${esc(data.invoice_number || `NJ-${String(Date.now()).slice(-6)}`)}"></div><div><label>Tanggal jual</label><input type="date" name="sale_date" value="${data.sale_date || today()}"></div><div><label>Harga jual</label><input type="number" min="0" name="sale_price" required value="${data.sale_price || 0}"></div><div><label>Diskon</label><input type="number" min="0" name="discount" value="${data.discount || 0}"></div><div><label>Komisi</label><input type="number" min="0" name="commission" value="${data.commission || 0}"></div>${fieldSelect(
+      "payment_status",
+      "Status pembayaran",
+      [
+        ["unpaid", "Belum dibayar"],
+        ["partial", "Dibayar sebagian"],
+        ["paid", "Lunas"],
+      ],
+      data.payment_status || "unpaid",
+      false,
+    )}<div><label>Uang diterima</label><input type="number" min="0" name="paid_amount" value="${data.paid_amount || 0}"></div>${fieldSelect(
+      "payment_method",
+      "Metode pembayaran",
+      [
+        ["Tunai", "Tunai"],
+        ["Transfer", "Transfer"],
+        ["Leasing", "Leasing"],
+      ],
+      data.payment_method || "",
+    )}<div class="span-2"><label>Catatan transaksi</label><textarea name="note">${esc(data.note || "")}</textarea></div></div>`;
+  }
+  if (type === "transaction") {
+    title = data.id ? "Ubah transaksi manual" : "Tambah transaksi manual";
+    subtitle =
+      "Transaksi otomatis dari kendaraan, rekondisi, dan penjualan tidak dapat diubah di sini.";
+    body = `<div class="form-grid">${fieldSelect(
+      "flow",
+      "Arus kas",
+      [
+        ["income", "Pemasukan"],
+        ["expense", "Pengeluaran"],
+      ],
+      data.flow || "expense",
+      false,
+    )}<div><label>Akun kas</label><select name="account_id"><option value="">Kas utama otomatis</option>${state.accounts.map((a) => `<option value="${a.id}" ${a.id === data.account_id ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></div><div><label>Tanggal</label><input type="date" name="transaction_date" value="${data.transaction_date || today()}"></div>${fieldSelect(
+      "category",
+      "Kategori",
+      [
+        ["Operasional", "Operasional"],
+        ["Modal pemilik", "Modal pemilik"],
+        ["Penarikan pemilik", "Penarikan pemilik"],
+        ["Pendapatan lain", "Pendapatan lain"],
+      ],
+      data.category || "",
+    )}<div><label>Nominal</label><input type="number" min="1" name="amount" required value="${data.amount || ""}"></div><div class="span-2"><label>Keterangan</label><textarea name="note">${esc(data.note || "")}</textarea></div></div>`;
+  }
+  if (!body) return openModal(type, data);
+  const backdrop = document.createElement("div");
+  backdrop.className = "modal-backdrop";
+  backdrop.innerHTML = `<section class="modal"><header class="modal-title"><div><h2>${title}</h2><p>${subtitle}</p></div><button type="button" class="modal-close" aria-label="Tutup">×</button></header><form class="modal-body">${body}<footer class="modal-foot"><button type="button" class="button secondary" data-close>Batal</button><button class="button" type="submit">Simpan</button></footer></form></section>`;
+  document.body.append(backdrop);
+  requestAnimationFrame(() => backdrop.classList.add("visible"));
+  const close = () => {
+    backdrop.classList.remove("visible");
+    setTimeout(() => backdrop.remove(), 180);
+  };
+  backdrop.querySelector(".modal-close").onclick = close;
+  backdrop.querySelector("[data-close]").onclick = close;
+  backdrop.onclick = (e) => {
+    if (e.target === backdrop) close();
+  };
+  backdrop.querySelectorAll('[data-other-select="1"]').forEach(
+    (s) =>
+      (s.onchange = () => {
+        const i = backdrop.querySelector(`[data-other-for="${s.name}"]`);
+        i.hidden = s.value !== "__other";
+        if (!i.hidden) i.focus();
+      }),
+  );
+  backdrop.querySelector("form").onsubmit = async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    form.querySelectorAll('[data-other-select="1"]').forEach((s) => {
+      if (s.value === "__other")
+        s.value = form.querySelector(`[data-other-for="${s.name}"]`).value;
+    });
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    submit.textContent = "Menyimpan…";
+    await saveForm(e, type, data.id, backdrop);
+    if (document.body.contains(backdrop)) {
+      submit.disabled = false;
+      submit.textContent = "Simpan";
+    }
+  };
+}
