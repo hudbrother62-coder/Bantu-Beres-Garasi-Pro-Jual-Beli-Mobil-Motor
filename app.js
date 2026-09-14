@@ -1,13 +1,6 @@
 const SUPABASE_URL = "https://enmbebmcjenngzjcnbma.supabase.co";
 const SUPABASE_KEY = "sb_publishable_NCTMqAr8tJ6bswIJQclCbA_HU96WUA5";
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: false,
-    storageKey: "garasi-pro-auth",
-  },
-});
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const app = document.querySelector("#app");
 const mobileIcons = {
   dashboard: "home",
@@ -676,9 +669,8 @@ document.addEventListener(
   true,
 );
 db.auth.onAuthStateChange((_event, session) => {
-  state.session = session;
-  if (!session) {
-    state.showroom = null;
+  if (!session && state.session) {
+    state.session = null;
     renderAuth();
   }
 });
