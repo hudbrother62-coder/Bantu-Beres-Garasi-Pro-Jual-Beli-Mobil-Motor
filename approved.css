@@ -371,3 +371,162 @@
 }
 .clean-shell .action strong { color: var(--text) !important; }
 .clean-shell .action p { color: var(--muted) !important; }
+
+/* Display repair — consistent themes and compact mobile pages. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.auth-card,
+.onboarding {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+.auth .brand,
+.auth h1,
+.auth label {
+  color: var(--text) !important;
+}
+.auth .tabs {
+  background: var(--surface-2) !important;
+}
+.auth .tabs button {
+  color: var(--muted) !important;
+}
+.auth .tabs button.active {
+  background: var(--surface) !important;
+  color: var(--accent) !important;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--text) 10%, transparent);
+}
+.auth input {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+.auth input::placeholder {
+  color: var(--muted) !important;
+  opacity: .82;
+}
+.auth input:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* The embedded source image was cropped to a blank area on small screens. */
+.logo-bantuberes {
+  position: relative;
+  overflow: hidden;
+  background-image: linear-gradient(140deg, #a855f7, #5b35e8 56%, #2563eb) !important;
+  background-size: 100% 100% !important;
+  background-position: center !important;
+  background-color: transparent !important;
+}
+.logo-bantuberes::after {
+  content: "\2713";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 58%;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.clean-shell .page,
+.clean-shell .panel,
+.clean-shell .data-card,
+.clean-shell .metric {
+  min-width: 0;
+}
+.clean-shell .row-actions,
+.clean-shell .card-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 780px) {
+  .auth {
+    min-height: 100dvh;
+    padding: 20px 14px !important;
+  }
+  .auth-card,
+  .onboarding {
+    width: min(100%, 460px);
+    padding: 24px 20px !important;
+    border-radius: 22px !important;
+  }
+  .auth h1 {
+    margin-top: 26px;
+  }
+  .auth input,
+  .auth select,
+  .auth textarea {
+    font-size: 16px !important;
+  }
+
+  .clean-shell {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom)) !important;
+  }
+  .clean-shell .page {
+    padding: 16px 14px calc(98px + env(safe-area-inset-bottom)) !important;
+  }
+  .clean-shell .metric-grid,
+  .clean-shell .dashboard-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+  .clean-shell .metric {
+    min-height: 116px !important;
+    padding: 14px !important;
+    border-radius: 16px !important;
+  }
+  .clean-shell .metric .label {
+    font-size: 10px !important;
+  }
+  .clean-shell .metric .value {
+    font-size: 22px !important;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+  .clean-shell .metric .meta {
+    font-size: 11px !important;
+    line-height: 1.35;
+  }
+  .clean-shell .mobile-nav {
+    height: calc(70px + env(safe-area-inset-bottom)) !important;
+  }
+  .clean-shell .mobile-drawer {
+    width: min(78vw, 300px) !important;
+    max-height: 100dvh;
+    border-radius: 0 18px 18px 0 !important;
+    overflow: hidden !important;
+  }
+  .clean-shell .mobile-drawer nav {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .clean-shell .drawer-logout {
+    margin-top: auto;
+    flex: 0 0 auto;
+  }
+  .clean-shell .modal {
+    overflow: hidden;
+  }
+  .clean-shell .modal-body {
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 350px) {
+  .clean-shell .metric {
+    min-height: 108px !important;
+    padding: 12px !important;
+  }
+  .clean-shell .metric .value {
+    font-size: 19px !important;
+  }
+}
