@@ -1645,7 +1645,7 @@ function printReport(type) {
     .map(([label, value]) => "<tr><th>" + reportCell(label) + "</th><td>" + reportCell(value) + "</td></tr>")
     .join("");
   const contact = [showroom.phone || showroom.whatsapp, showroom.contact_email].filter(Boolean).join(" · ");
-  const html = \`<!doctype html><html lang="id"><head><meta charset="utf-8"><title>\${reportCell(report.title)} - \${reportCell(showroom.name)}</title><style>
+  const html = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>${reportCell(report.title)} - ${reportCell(showroom.name)}</title><style>
     @page{size:A4 landscape;margin:12mm}
     *{box-sizing:border-box}
     body{margin:0;color:#111;font:10px Arial,Helvetica,sans-serif;background:#fff}
@@ -1668,12 +1668,12 @@ function printReport(type) {
     .footer{margin-top:12px;padding-top:6px;border-top:1px solid #999;font-size:8px;color:#555}
     @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   </style></head><body>
-    <header class="report-head"><div class="identity"><h1>\${reportCell(report.title)}</h1><strong>\${reportCell(showroom.name)}</strong><br>\${reportCell(showroom.address || showroom.city)}<br>\${reportCell(contact)}</div><div class="meta">Dicetak: \${reportCell(generatedAt)}<br>Penanggung jawab: \${reportCell(showroom.owner_name)}<br>Jenis usaha: \${showroom.business_type === "car" ? "Mobil" : showroom.business_type === "motorcycle" ? "Motor" : "Mobil & Motor"}</div></header>
-    <table class="summary"><tbody>\${summaryRows}</tbody></table>
-    <table class="report-table"><thead><tr>\${report.columns.map((column) => "<th>" + reportCell(column) + "</th>").join("")}</tr></thead><tbody>\${tableRows}</tbody></table>
-    <section class="signature"><div></div><div class="signature-box">\${reportCell(showroom.city)}, \${reportDate(new Date())}<br>Pemilik/Penanggung Jawab<div class="signature-space"></div><strong>\${reportCell(showroom.owner_name)}</strong></div></section>
+    <header class="report-head"><div class="identity"><h1>${reportCell(report.title)}</h1><strong>${reportCell(showroom.name)}</strong><br>${reportCell(showroom.address || showroom.city)}<br>${reportCell(contact)}</div><div class="meta">Dicetak: ${reportCell(generatedAt)}<br>Penanggung jawab: ${reportCell(showroom.owner_name)}<br>Jenis usaha: ${showroom.business_type === "car" ? "Mobil" : showroom.business_type === "motorcycle" ? "Motor" : "Mobil & Motor"}</div></header>
+    <table class="summary"><tbody>${summaryRows}</tbody></table>
+    <table class="report-table"><thead><tr>${report.columns.map((column) => "<th>" + reportCell(column) + "</th>").join("")}</tr></thead><tbody>${tableRows}</tbody></table>
+    <section class="signature"><div></div><div class="signature-box">${reportCell(showroom.city)}, ${reportDate(new Date())}<br>Pemilik/Penanggung Jawab<div class="signature-space"></div><strong>${reportCell(showroom.owner_name)}</strong></div></section>
     <footer class="footer">Dokumen dibuat dari Bantu Beres Garasi Pro berdasarkan data showroom yang sedang aktif.</footer>
-  </body></html>\`;
+  </body></html>`;
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
   frame.style.cssText = "position:fixed;width:0;height:0;border:0;right:0;bottom:0";
