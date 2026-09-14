@@ -561,8 +561,11 @@ async function saveForm(e, type, id, modal) {
   });
   const numberFields = [
     "year",
+    "mileage",
+    "engine_capacity",
     "purchase_price",
     "target_price",
+    "minimum_price",
     "amount",
     "offered_price",
     "sale_price",
