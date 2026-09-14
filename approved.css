@@ -415,25 +415,16 @@ body {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-/* The embedded source image was cropped to a blank area on small screens. */
+/* Exact Bantu Beres artwork supplied by the owner. */
 .logo-bantuberes {
-  position: relative;
-  overflow: hidden;
-  background-image: linear-gradient(140deg, #a855f7, #5b35e8 56%, #2563eb) !important;
-  background-size: 100% 100% !important;
-  background-position: center !important;
-  background-color: transparent !important;
+  background-color: #fff !important;
+  background-image: url("./assets/bantu-beres-logo.jpg") !important;
+  background-repeat: no-repeat !important;
+  background-size: 310% !important;
+  background-position: 49% 37% !important;
 }
 .logo-bantuberes::after {
-  content: "\2713";
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: 58%;
-  font-weight: 900;
-  line-height: 1;
+  content: none !important;
 }
 
 .clean-shell .page,
@@ -498,6 +489,11 @@ body {
   .clean-shell .mobile-nav {
     height: calc(70px + env(safe-area-inset-bottom)) !important;
   }
+  .clean-shell .mobile-nav > :nth-child(1) { grid-column: 1; grid-row: 1; }
+  .clean-shell .mobile-nav > :nth-child(2) { grid-column: 2; grid-row: 1; }
+  .clean-shell .mobile-nav > :nth-child(3) { grid-column: 4; grid-row: 1; }
+  .clean-shell .mobile-nav > .add-action { grid-column: 3; grid-row: 1; }
+  .clean-shell .mobile-nav > [data-menu] { grid-column: 5; grid-row: 1; }
   .clean-shell .mobile-drawer {
     width: min(78vw, 300px) !important;
     max-height: 100dvh;
@@ -513,11 +509,43 @@ body {
     margin-top: auto;
     flex: 0 0 auto;
   }
-  .clean-shell .modal {
-    overflow: hidden;
+  .modal-backdrop {
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)) !important;
   }
-  .clean-shell .modal-body {
-    overflow-y: auto;
+  .clean-shell .modal,
+  .modal-backdrop .modal {
+    display: flex !important;
+    flex-direction: column;
+    width: 100% !important;
+    max-height: calc(100dvh - max(20px, env(safe-area-inset-top) + env(safe-area-inset-bottom))) !important;
+    margin: auto 0;
+    overflow: hidden !important;
+  }
+  .modal-title {
+    flex: 0 0 auto;
+  }
+  .clean-shell .modal-body,
+  .modal-backdrop .modal-body {
+    display: block !important;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    padding-bottom: max(14px, env(safe-area-inset-bottom)) !important;
+  }
+  .modal-foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
   }
 }
 
