@@ -991,7 +991,7 @@ finance = function () {
   ]
     .sort()
     .reverse();
-  return `${pageHead("Keuangan", "Kas berbasis uang aktual; laba dan piutang dihitung terpisah.", '<button class="button primary-action" data-modal="transaction">+ Transaksi manual</button>')}<div class="period-bar"><label>Periode laporan</label><select id="financePeriod"><option value="all">Keseluruhan</option>${months.map((m) => `<option value="${m}" ${m === financePeriod ? "selected" : ""}>${new Date(m + "-01").toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</option>`).join("")}</select></div><div class="metric-grid"><div class="metric"><div class="label">${financePeriod === "all" ? "SALDO KAS" : "PERUBAHAN KAS"}</div><div class="value ${balance < 0 ? "bad" : ""}">${rupiah(balance)}</div><div class="meta">${financePeriod === "all" ? "Saldo awal + seluruh arus kas" : "Masuk dikurangi keluar pada periode"}</div></div><div class="metric"><div class="label">PEMASUKAN</div><div class="value up">${rupiah(income)}</div><div class="meta">Termasuk pembayaran penjualan</div></div><div class="metric"><div class="label">PENGELUARAN</div><div class="value bad">${rupiah(expense)}</div><div class="meta">Pembelian, rekondisi, dan biaya lain</div></div><div class="metric"><div class="label">PIUTANG PENJUALAN</div><div class="value warn">${rupiah(state.sales.reduce((a, s) => a + saleMetrics(s).receivable, 0))}</div><div class="meta">Belum dihitung sebagai kas</div></div></div><div class="accounting-note"><strong>Aturan perhitungan</strong><span>Kas = saldo awal + uang masuk − uang keluar. Laba = harga jual bersih − harga beli − rekondisi − komisi. Piutang dipisahkan sampai benar-benar dibayar.</span></div><div class="panel data-panel">${transactionTable(filtered)}</div>`;
+  return `${pageHead("Keuangan", "Kas berbasis uang aktual; laba dan piutang dihitung terpisah.", '<button class="button primary-action" data-modal="transaction">+ Transaksi manual</button>')}<div class="period-bar"><label>Periode laporan</label><select id="financePeriod"><option value="all">Keseluruhan</option>${months.map((m) => `<option value="${m}" ${m === financePeriod ? "selected" : ""}>${new Date(m + "-01").toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</option>`).join("")}</select></div><div class="metric-grid"><div class="metric"><div class="label">${financePeriod === "all" ? "SALDO KAS" : "PERUBAHAN KAS"}</div><div class="value ${balance < 0 ? "bad" : ""}">${rupiah(balance)}</div><div class="meta">${financePeriod === "all" ? "Saldo awal + seluruh arus kas" : "Masuk dikurangi keluar pada periode"}</div></div><div class="metric"><div class="label">PEMASUKAN</div><div class="value up">${rupiah(income)}</div><div class="meta">Termasuk pembayaran penjualan</div></div><div class="metric"><div class="label">PENGELUARAN</div><div class="value bad">${rupiah(expense)}</div><div class="meta">Pembelian, rekondisi, dan biaya lain</div></div><div class="metric"><div class="label">PIUTANG PENJUALAN</div><div class="value warn">${rupiah(state.sales.reduce((a, s) => a + saleMetrics(s).receivable, 0))}</div><div class="meta">Belum dihitung sebagai kas</div></div></div><div class="panel data-panel">${transactionTable(filtered)}</div>`;
 };
 function transactionTable(rows) {
   const body = rows
@@ -1504,3 +1504,194 @@ bindPage = function () {
 };
 renderPage = renderRolePage;
 renderShell = renderRoleShell;
+
+
+/* Dedicated spreadsheet-style printable reports. */
+function reportCell(value) {
+  return esc(value == null || value === "" ? "-" : String(value));
+}
+function reportDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? reportCell(value)
+    : date.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+function reportVehicleName(vehicle, fallback = null) {
+  const item = vehicle || fallback;
+  return item ? [item.brand, item.model].filter(Boolean).join(" ") || "-" : "-";
+}
+function printableReportData(type) {
+  const activeStock = state.vehicles.filter(
+    (vehicle) => !["sold", "delivered", "cancelled"].includes(vehicle.status),
+  );
+  if (type === "stock") {
+    const rows = activeStock.map((vehicle, index) => {
+      const recon = state.costs
+        .filter((cost) => cost.vehicle_id === vehicle.id)
+        .reduce((sum, cost) => sum + Number(cost.amount || 0), 0);
+      const purchase = Number(vehicle.purchase_price || 0);
+      return [
+        index + 1,
+        vehicle.code,
+        vehicle.vehicle_type === "car" ? "Mobil" : "Motor",
+        reportVehicleName(vehicle),
+        vehicle.year,
+        vehicle.license_plate,
+        reportDate(vehicle.purchase_date),
+        rupiah(purchase),
+        rupiah(recon),
+        rupiah(purchase + recon),
+        rupiah(vehicle.target_price),
+        statusLabel(vehicle.status),
+      ];
+    });
+    const capital = activeStock.reduce((sum, vehicle) => sum + vehicleHpp(vehicle), 0);
+    return {
+      title: "LAPORAN STOK KENDARAAN",
+      columns: ["No.", "Kode", "Jenis", "Kendaraan", "Tahun", "No. Polisi", "Tanggal Beli", "Harga Beli", "Rekondisi", "HPP", "Target Jual", "Status"],
+      rows,
+      summary: [
+        ["Jumlah stok aktif", activeStock.length + " unit"],
+        ["Total modal dalam stok", rupiah(capital)],
+        ["Total target penjualan", rupiah(activeStock.reduce((sum, vehicle) => sum + Number(vehicle.target_price || 0), 0))],
+      ],
+    };
+  }
+  const salesRows = type === "receivable"
+    ? state.sales.filter((sale) => saleMetrics(sale).receivable > 0)
+    : state.sales;
+  if (type === "receivable") {
+    return {
+      title: "LAPORAN PIUTANG PENJUALAN",
+      columns: ["No.", "Tanggal", "No. Nota", "Customer", "Kendaraan", "Harga Bersih", "Sudah Dibayar", "Sisa Piutang", "Status"],
+      rows: salesRows.map((sale, index) => {
+        const metrics = saleMetrics(sale);
+        return [
+          index + 1,
+          reportDate(sale.sale_date),
+          sale.invoice_number,
+          sale.customers?.full_name,
+          reportVehicleName(sale.vehicles, state.vehicles.find((vehicle) => vehicle.id === sale.vehicle_id)),
+          rupiah(metrics.net),
+          rupiah(sale.paid_amount),
+          rupiah(metrics.receivable),
+          statusLabel(sale.payment_status),
+        ];
+      }),
+      summary: [
+        ["Jumlah transaksi belum lunas", salesRows.length + " transaksi"],
+        ["Total nilai penjualan bersih", rupiah(salesRows.reduce((sum, sale) => sum + saleMetrics(sale).net, 0))],
+        ["Total pembayaran diterima", rupiah(salesRows.reduce((sum, sale) => sum + Number(sale.paid_amount || 0), 0))],
+        ["Total sisa piutang", rupiah(salesRows.reduce((sum, sale) => sum + saleMetrics(sale).receivable, 0))],
+      ],
+    };
+  }
+  return {
+    title: "LAPORAN PENJUALAN KENDARAAN",
+    columns: ["No.", "Tanggal", "No. Nota", "Customer", "Kendaraan", "Harga Jual", "Diskon", "Harga Bersih", "Dibayar", "Komisi", "HPP", "Laba", "Status"],
+    rows: salesRows.map((sale, index) => {
+      const metrics = saleMetrics(sale);
+      const vehicle = sale.vehicles || state.vehicles.find((item) => item.id === sale.vehicle_id);
+      return [
+        index + 1,
+        reportDate(sale.sale_date),
+        sale.invoice_number,
+        sale.customers?.full_name,
+        reportVehicleName(vehicle),
+        rupiah(sale.sale_price),
+        rupiah(sale.discount),
+        rupiah(metrics.net),
+        rupiah(sale.paid_amount),
+        rupiah(sale.commission),
+        rupiah(vehicle ? vehicleHpp(vehicle) : 0),
+        rupiah(metrics.profit),
+        statusLabel(sale.payment_status),
+      ];
+    }),
+    summary: [
+      ["Jumlah penjualan", salesRows.length + " transaksi"],
+      ["Total penjualan bersih", rupiah(salesRows.reduce((sum, sale) => sum + saleMetrics(sale).net, 0))],
+      ["Total pembayaran diterima", rupiah(salesRows.reduce((sum, sale) => sum + Number(sale.paid_amount || 0), 0))],
+      ["Total laba", rupiah(salesRows.reduce((sum, sale) => sum + saleMetrics(sale).profit, 0))],
+    ],
+  };
+}
+function statusLabel(value) {
+  const labels = {
+    inspection: "Pemeriksaan",
+    reconditioning: "Rekondisi",
+    ready: "Siap dijual",
+    listed: "Dipasarkan",
+    booked: "Dipesan",
+    sold: "Terjual",
+    delivered: "Diserahkan",
+    paid: "Lunas",
+    partial: "Sebagian",
+    unpaid: "Belum lunas",
+  };
+  return labels[value] || value || "-";
+}
+function printReport(type) {
+  const report = printableReportData(type);
+  const showroom = state.showroom || {};
+  const generatedAt = new Date().toLocaleString("id-ID", {
+    day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+  const tableRows = report.rows.length
+    ? report.rows.map((row) => "<tr>" + row.map((cell) => "<td>" + reportCell(cell) + "</td>").join("") + "</tr>").join("")
+    : '<tr><td class="empty-print" colspan="' + report.columns.length + '">Belum ada data untuk laporan ini.</td></tr>';
+  const summaryRows = report.summary
+    .map(([label, value]) => "<tr><th>" + reportCell(label) + "</th><td>" + reportCell(value) + "</td></tr>")
+    .join("");
+  const contact = [showroom.phone || showroom.whatsapp, showroom.contact_email].filter(Boolean).join(" · ");
+  const html = \`<!doctype html><html lang="id"><head><meta charset="utf-8"><title>\${reportCell(report.title)} - \${reportCell(showroom.name)}</title><style>
+    @page{size:A4 landscape;margin:12mm}
+    *{box-sizing:border-box}
+    body{margin:0;color:#111;font:10px Arial,Helvetica,sans-serif;background:#fff}
+    .report-head{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:start;border-bottom:2px solid #111;padding-bottom:9px;margin-bottom:12px}
+    h1{font-size:17px;letter-spacing:.4px;margin:0 0 6px}
+    .identity{line-height:1.55}.identity strong{font-size:13px}
+    .meta{text-align:right;line-height:1.6}
+    .summary{width:auto;min-width:330px;border-collapse:collapse;margin:0 0 14px auto}
+    .summary th,.summary td{border:1px solid #555;padding:5px 7px;text-align:left}
+    .summary th{background:#eee;width:58%}
+    .report-table{width:100%;border-collapse:collapse;table-layout:auto}
+    .report-table thead{display:table-header-group}
+    .report-table tr{break-inside:avoid}
+    .report-table th,.report-table td{border:1px solid #555;padding:5px 4px;vertical-align:top;white-space:nowrap}
+    .report-table th{background:#e9e9e9;text-align:center;font-weight:700}
+    .report-table td:first-child{text-align:center}
+    .empty-print{text-align:center!important;padding:22px!important}
+    .signature{display:grid;grid-template-columns:1fr 220px;gap:30px;margin-top:24px;break-inside:avoid}
+    .signature-box{text-align:center;line-height:1.5}.signature-space{height:55px}
+    .footer{margin-top:12px;padding-top:6px;border-top:1px solid #999;font-size:8px;color:#555}
+    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>
+    <header class="report-head"><div class="identity"><h1>\${reportCell(report.title)}</h1><strong>\${reportCell(showroom.name)}</strong><br>\${reportCell(showroom.address || showroom.city)}<br>\${reportCell(contact)}</div><div class="meta">Dicetak: \${reportCell(generatedAt)}<br>Penanggung jawab: \${reportCell(showroom.owner_name)}<br>Jenis usaha: \${showroom.business_type === "car" ? "Mobil" : showroom.business_type === "motorcycle" ? "Motor" : "Mobil & Motor"}</div></header>
+    <table class="summary"><tbody>\${summaryRows}</tbody></table>
+    <table class="report-table"><thead><tr>\${report.columns.map((column) => "<th>" + reportCell(column) + "</th>").join("")}</tr></thead><tbody>\${tableRows}</tbody></table>
+    <section class="signature"><div></div><div class="signature-box">\${reportCell(showroom.city)}, \${reportDate(new Date())}<br>Pemilik/Penanggung Jawab<div class="signature-space"></div><strong>\${reportCell(showroom.owner_name)}</strong></div></section>
+    <footer class="footer">Dokumen dibuat dari Bantu Beres Garasi Pro berdasarkan data showroom yang sedang aktif.</footer>
+  </body></html>\`;
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.cssText = "position:fixed;width:0;height:0;border:0;right:0;bottom:0";
+  document.body.appendChild(frame);
+  const printWindow = frame.contentWindow;
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  frame.onload = () => {
+    printWindow.focus();
+    printWindow.print();
+    setTimeout(() => frame.remove(), 1000);
+  };
+}
+const bindPageBeforePrintableReports = bindPage;
+bindPage = function () {
+  bindPageBeforePrintableReports();
+  document.querySelectorAll("[data-print]").forEach((button) => {
+    button.onclick = () => printReport(button.dataset.print);
+  });
+};
