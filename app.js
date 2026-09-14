@@ -524,7 +524,7 @@ function openModal(type, data = {}) {
   const forms = {
     vehicle: `<h2>${data.id ? "Ubah" : "Tambah"} kendaraan</h2><div class="form-grid"><div><label>Kode unit</label><input name="code" required value="${esc(data.code || "")}"></div><div><label>Jenis</label><select name="vehicle_type"><option value="car" ${data.vehicle_type === "car" ? "selected" : ""}>Mobil</option><option value="motorcycle" ${data.vehicle_type === "motorcycle" ? "selected" : ""}>Motor</option></select></div><div><label>Merek</label><input name="brand" required value="${esc(data.brand || "")}"></div><div><label>Tipe/Model</label><input name="model" required value="${esc(data.model || "")}"></div><div><label>Tahun</label><input type="number" name="year" value="${data.year || ""}"></div><div><label>Nomor polisi</label><input name="license_plate" value="${esc(data.license_plate || "")}"></div><div><label>Harga beli</label><input type="number" min="0" name="purchase_price" value="${data.purchase_price || 0}"></div><div><label>Target jual</label><input type="number" min="0" name="target_price" value="${data.target_price || 0}"></div><div><label>Tanggal beli</label><input type="date" name="purchase_date" value="${data.purchase_date || new Date().toISOString().slice(0, 10)}"></div><div><label>Status</label><select name="status">${options(["inspection", "reconditioning", "ready", "listed", "booked", "sold", "delivered"], data.status || "inspection")}</select></div><div class="span-2"><label>Catatan</label><textarea name="description">${esc(data.description || "")}</textarea></div></div>`,
     cost: `<h2>Catat biaya rekondisi</h2><div class="form-grid"><div class="span-2"><label>Kendaraan</label><select name="vehicle_id" required><option value="">Pilih unit</option>${vehicleOptions}</select></div><div><label>Tanggal</label><input type="date" name="cost_date" value="${new Date().toISOString().slice(0, 10)}"></div><div><label>Kategori</label><input name="category" required placeholder="Contoh: Mesin / CVT / Ban"></div><div><label>Nominal</label><input type="number" min="1" name="amount" required></div><div><label>Bengkel/vendor</label><input name="vendor"></div><div class="span-2"><label>Catatan</label><textarea name="note"></textarea></div></div>`,
-    customer: `<h2>Tambah customer</h2><div class="form-grid"><div class="span-2"><label>Nama lengkap</label><input name="full_name" required></div><div><label>WhatsApp</label><input name="phone"></div><div><label>Kota</label><input name="city"></div><div><label>Sumber lead</label><input name="source" placeholder="WhatsApp, Instagram, walk-in"></div><div class="span-2"><label>Catatan</label><textarea name="note"></textarea></div></div>`,
+    customer: `<h2>Tambah customer</h2><div class="form-grid"><div class="span-2"><label>Nama lengkap</label><input name="full_name" required></div><div><label>WhatsApp</label><input name="phone"></div><div><label>Email</label><input type="email" name="email"></div><div><label>Kota</label><input name="city"></div><div><label>Sumber lead</label><input name="source" placeholder="WhatsApp, Instagram, walk-in"></div><div class="span-2"><label>Catatan</label><textarea name="note"></textarea></div></div>`,
     lead: `<h2>Tambah lead</h2><div class="form-grid"><div><label>Customer</label><select name="customer_id" required><option value="">Pilih customer</option>${customerOptions}</select></div><div><label>Unit diminati</label><select name="vehicle_id"><option value="">Belum memilih unit</option>${vehicleOptions}</select></div><div><label>Status</label><select name="status">${options(["new", "contacted", "interested", "visit_scheduled", "test_drive", "negotiation", "booked", "waiting_payment", "closed", "lost", "follow_up"], "new")}</select></div><div><label>Follow-up berikutnya</label><input type="datetime-local" name="next_follow_up_at"></div><div><label>Penawaran</label><input type="number" name="offered_price"></div><div class="span-2"><label>Catatan</label><textarea name="note"></textarea></div></div>`,
     sale: `<h2>Catat penjualan</h2><div class="form-grid"><div><label>Unit terjual</label><select name="vehicle_id" required><option value="">Pilih unit</option>${vehicleOptions}</select></div><div><label>Customer</label><select name="customer_id"><option value="">Pilih customer</option>${customerOptions}</select></div><div><label>No. nota</label><input name="invoice_number" required value="NJ-${String(Date.now()).slice(-6)}"></div><div><label>Tanggal jual</label><input type="date" name="sale_date" value="${new Date().toISOString().slice(0, 10)}"></div><div><label>Harga jual</label><input type="number" min="0" name="sale_price" required></div><div><label>Diskon</label><input type="number" min="0" name="discount" value="0"></div><div><label>Komisi sales</label><input type="number" min="0" name="commission" value="0"></div><div><label>Status pembayaran</label><select name="payment_status">${options(["unpaid", "partial", "paid"], "unpaid")}</select></div><div class="span-2"><label>Metode pembayaran / leasing</label><input name="payment_method"></div></div>`,
     transaction: `<h2>Catat transaksi kas</h2><div class="form-grid"><div><label>Arus</label><select name="flow"><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option></select></div><div><label>Akun kas</label><select name="account_id"><option value="">Tanpa akun</option>${options(state.accounts, "", (a) => a.name)}</select></div><div><label>Tanggal</label><input type="date" name="transaction_date" value="${new Date().toISOString().slice(0, 10)}"></div><div><label>Kategori</label><input name="category" required></div><div><label>Nominal</label><input type="number" min="1" name="amount" required></div><div class="span-2"><label>Keterangan</label><textarea name="note"></textarea></div></div>`,
@@ -1076,9 +1076,36 @@ function openModalV2(type, data = {}) {
           `<option value="${c.id}" ${c.id === data.customer_id ? "selected" : ""}>${esc(c.full_name)}</option>`,
       )
       .join("");
+  const leadOpts = state.leads
+    .filter((lead) => lead.id === data.lead_id || !["closed", "lost"].includes(lead.status))
+    .map((lead) => `<option value="${lead.id}" ${lead.id === data.lead_id ? "selected" : ""}>${esc(lead.customers?.full_name || "Lead tanpa customer")} — ${esc(leadDisplayStatus(lead.status))}</option>`)
+    .join("");
   let title = "",
     subtitle = "",
     body = "";
+  if (type === "lead") {
+    title = data.id ? "Ubah follow-up" : "Tambah follow-up";
+    subtitle = "Catat minat calon pembeli dan jadwal tindak lanjutnya secara lengkap.";
+    body = `<div class="form-grid"><div class="span-2"><label>Customer</label><select name="customer_id"><option value="">Pilih customer</option>${customerOpts}</select><small>Tambahkan customer terlebih dahulu dari menu Customer jika belum tersedia.</small></div><div class="span-2"><label>Kendaraan yang diminati</label><select name="vehicle_id"><option value="">Belum memilih kendaraan</option>${vehicleOpts}</select></div>${fieldSelect(
+      "status",
+      "Tahap follow-up",
+      [
+        ["new", "Lead baru"],
+        ["contacted", "Sudah dihubungi"],
+        ["interested", "Tertarik"],
+        ["visit_scheduled", "Jadwal kunjungan"],
+        ["test_drive", "Test drive"],
+        ["negotiation", "Negosiasi"],
+        ["booked", "Booking"],
+        ["waiting_payment", "Menunggu pembayaran"],
+        ["closed", "Berhasil closing"],
+        ["lost", "Tidak lanjut"],
+        ["follow_up", "Perlu di-follow-up"],
+      ],
+      data.status || "new",
+      false,
+    )}<div><label>Follow-up berikutnya</label><input type="datetime-local" name="next_follow_up_at" value="${data.next_follow_up_at ? new Date(data.next_follow_up_at).toISOString().slice(0,16) : ""}"></div><div><label>Nilai penawaran</label><input type="number" min="0" name="offered_price" value="${data.offered_price || ""}"></div><div class="span-2"><label>Catatan komunikasi</label><textarea name="note" placeholder="Ringkasan percakapan, kebutuhan customer, atau rencana tindak lanjut">${esc(data.note || "")}</textarea></div></div>`;
+  }
   if (type === "vehicle") {
     title = data.id ? "Ubah kendaraan" : "Tambah kendaraan";
     subtitle = "Kode unit dibuat otomatis dan berurutan setelah disimpan.";
@@ -1095,7 +1122,7 @@ function openModalV2(type, data = {}) {
             false,
           )
         : `<input type="hidden" name="vehicle_type" value="${state.showroom.business_type}">`;
-    body = `<div class="form-grid"><div><label>Kode unit</label><input value="${esc(data.code || "Otomatis saat disimpan")}" readonly class="readonly"></div>${kinds}<div><label>Merek</label><input name="brand" required value="${esc(data.brand || "")}"></div><div><label>Model / tipe</label><input name="model" required value="${esc(data.model || "")}"></div><div><label>Tahun</label><input type="number" name="year" min="1900" max="2100" value="${data.year || ""}"></div><div><label>Nomor polisi</label><input name="license_plate" value="${esc(data.license_plate || "")}"></div>${fieldSelect(
+    body = `<div class="form-grid"><div><label>Kode unit</label><input value="${esc(data.code || "Otomatis saat disimpan")}" readonly class="readonly"></div>${kinds}<div><label>Merek</label><input name="brand" required value="${esc(data.brand || "")}"></div><div><label>Model / tipe</label><input name="model" required value="${esc(data.model || "")}"></div><div><label>Varian</label><input name="variant" value="${esc(data.variant || "")}"></div><div><label>Tahun</label><input type="number" name="year" min="1900" max="2100" value="${data.year || ""}"></div><div><label>Nomor polisi</label><input name="license_plate" value="${esc(data.license_plate || "")}"></div><div><label>Warna</label><input name="color" value="${esc(data.color || "")}"></div><div><label>Kilometer</label><input type="number" min="0" name="mileage" value="${data.mileage || ""}"></div>${fieldSelect(
       "transmission",
       "Transmisi",
       [
@@ -1114,7 +1141,7 @@ function openModalV2(type, data = {}) {
         ["Listrik", "Listrik"],
       ],
       data.fuel_type || "",
-    )}<div><label>Harga beli</label><input type="number" min="0" name="purchase_price" required value="${data.purchase_price || 0}"></div><div><label>Target jual</label><input type="number" min="0" name="target_price" value="${data.target_price || 0}"></div><div><label>Tanggal beli</label><input type="date" name="purchase_date" value="${data.purchase_date || today()}"></div>${fieldSelect(
+    )}<div><label>Kapasitas mesin (cc)</label><input type="number" min="0" name="engine_capacity" value="${data.engine_capacity || ""}"></div><div><label>Harga beli</label><input type="number" min="0" name="purchase_price" required value="${data.purchase_price || 0}"></div><div><label>Target jual</label><input type="number" min="0" name="target_price" value="${data.target_price || 0}"></div><div><label>Harga minimum</label><input type="number" min="0" name="minimum_price" value="${data.minimum_price || ""}"></div><div><label>Tanggal beli</label><input type="date" name="purchase_date" value="${data.purchase_date || today()}"></div>${fieldSelect(
       "status",
       "Status unit",
       [
@@ -1224,5 +1251,32 @@ function photoManager(vehicleId) {
     ? `<div class="photo-grid">${rows.map((p) => `<figure><img src="${esc(p.public_url)}" alt="Foto kendaraan"><figcaption>${p.is_primary ? "Sampul" : "Foto tambahan"} <button type="button" data-delete-photo="${p.id}" data-path="${esc(p.storage_path)}">Hapus</button></figcaption></figure>`).join("")}</div>`
     : "";
 }
+
+function leadDisplayStatus(value) {
+  const labels = { new: "Lead baru", contacted: "Dihubungi", interested: "Tertarik", visit_scheduled: "Jadwal kunjungan", test_drive: "Test drive", negotiation: "Negosiasi", booked: "Booking", waiting_payment: "Menunggu pembayaran", closed: "Closing", lost: "Tidak lanjut", follow_up: "Follow-up" };
+  return labels[value] || String(value || "Belum diatur").replaceAll("_", " ");
+}
+function leadDate(value) {
+  if (!value) return "Belum dijadwalkan";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Tanggal tidak valid" : date.toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
+}
+leads = function () {
+  const rows = [...state.leads].sort((a, b) => new Date(a.next_follow_up_at || "2999-01-01") - new Date(b.next_follow_up_at || "2999-01-01"));
+  return `${pageHead("Follow-up", "Kelola calon pembeli dari minat sampai closing.", '<button class="button primary-action" data-modal="lead">+ Tambah follow-up</button>')}<div class="followup-summary"><div><span>Total lead</span><strong>${rows.length}</strong></div><div><span>Perlu ditindaklanjuti</span><strong>${rows.filter((x) => x.status !== "closed" && x.status !== "lost").length}</strong></div><div><span>Closing</span><strong>${rows.filter((x) => x.status === "closed").length}</strong></div></div><div class="panel data-panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Customer</th><th>Kendaraan</th><th>Status</th><th>Jadwal berikutnya</th><th>Penawaran</th><th>Aksi</th></tr></thead><tbody>${rows.map(leadRow).join("") || '<tr><td colspan="6"><div class="empty">Belum ada follow-up. Tambahkan calon pembeli pertama.</div></td></tr>'}</tbody></table></div>${mobileCards(rows, (lead) => `<article class="data-card lead-card"><div class="card-top"><div><small>${esc(lead.customers?.phone || "Customer")}</small><h3>${esc(lead.customers?.full_name || "Customer belum dipilih")}</h3></div><span class="status lead-status">${esc(leadDisplayStatus(lead.status))}</span></div><p class="lead-vehicle"><span class="material-symbols-rounded">directions_car</span>${esc(lead.vehicles ? `${lead.vehicles.brand} ${lead.vehicles.model} · ${lead.vehicles.year || "-"}` : "Belum memilih kendaraan")}</p><dl><div><dt>Follow-up</dt><dd>${esc(leadDate(lead.next_follow_up_at))}</dd></div><div><dt>Penawaran</dt><dd>${rupiah(lead.offered_price)}</dd></div></dl>${lead.note ? `<p class="lead-note">${esc(lead.note)}</p>` : ""}<div class="card-actions"><button class="button secondary compact" data-edit-lead="${lead.id}">Ubah</button><button class="button danger compact" data-delete-lead="${lead.id}">Hapus</button></div></article>`)}</div>`;
+};
+function leadRow(lead) {
+  return `<tr><td><strong>${esc(lead.customers?.full_name || "Customer belum dipilih")}</strong><br><small>${esc(lead.customers?.phone || "-")}</small></td><td>${esc(lead.vehicles ? `${lead.vehicles.brand} ${lead.vehicles.model}` : "Belum memilih kendaraan")}</td><td><span class="status lead-status">${esc(leadDisplayStatus(lead.status))}</span></td><td>${esc(leadDate(lead.next_follow_up_at))}</td><td>${rupiah(lead.offered_price)}</td><td><div class="row-actions"><button class="button secondary compact" data-edit-lead="${lead.id}">Ubah</button><button class="button danger compact" data-delete-lead="${lead.id}">Hapus</button></div></td></tr>`;
+}
+const bindPageWithFollowups = bindPage;
+bindPage = function () {
+  bindPageWithFollowups();
+  document.querySelectorAll("[data-edit-lead]").forEach((button) => {
+    button.onclick = () => openModalV2("lead", state.leads.find((lead) => lead.id === button.dataset.editLead));
+  });
+  document.querySelectorAll("[data-delete-lead]").forEach((button) => {
+    button.onclick = () => confirmAction("Hapus follow-up?", "Riwayat follow-up ini akan dihapus dari showroom.", () => deleteRecord("leads", button.dataset.deleteLead));
+  });
+};
 
 renderShell = renderShellApproved;
