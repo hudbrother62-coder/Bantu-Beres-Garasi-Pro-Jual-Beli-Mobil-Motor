@@ -24,7 +24,7 @@ $('redeem-form').addEventListener('submit',async event=>{
  try{
   const username=$('username').value.trim().toLowerCase(),password=$('new-password').value;
   if(password!==$('confirm-password').value)throw Error('Konfirmasi password tidak sama.');
-  if(!/^[a-z0-9._-]{3,32}$/.test(username)&&!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(username))throw Error('Isi username atau email yang valid.');
+  if(!/^[a-z0-9._-]{3,32}$/.test(username)&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(username))throw Error('Isi username atau email yang valid.');
   const email=username.includes('@')?username:username+'@login.garasipro.local';
   const result=await invoke({action:'redeem',email,code:$('code').value.trim(),newPassword:password});
   if(!result?.ok)throw Error('Pemulihan belum berhasil.');
