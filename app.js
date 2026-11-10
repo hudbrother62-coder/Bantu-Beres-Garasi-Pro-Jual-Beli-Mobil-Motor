@@ -1027,11 +1027,34 @@ finance = function () {
     .reverse();
   return `${pageHead("Keuangan", "Kas berbasis uang aktual; laba dan piutang dihitung terpisah.", '<button class="button primary-action" data-modal="transaction">+ Transaksi manual</button>')}<div class="period-bar"><label>Periode laporan</label><select id="financePeriod"><option value="all">Keseluruhan</option>${months.map((m) => `<option value="${m}" ${m === financePeriod ? "selected" : ""}>${new Date(m + "-01").toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</option>`).join("")}</select></div><div class="metric-grid"><div class="metric"><div class="label">${financePeriod === "all" ? "SALDO KAS" : "PERUBAHAN KAS"}</div><div class="value ${balance < 0 ? "bad" : ""}">${rupiah(balance)}</div><div class="meta">${financePeriod === "all" ? "Saldo awal + seluruh arus kas" : "Masuk dikurangi keluar pada periode"}</div></div><div class="metric"><div class="label">PEMASUKAN</div><div class="value up">${rupiah(income)}</div><div class="meta">Termasuk pembayaran penjualan</div></div><div class="metric"><div class="label">PENGELUARAN</div><div class="value bad">${rupiah(expense)}</div><div class="meta">Pembelian, rekondisi, dan biaya lain</div></div><div class="metric"><div class="label">PIUTANG PENJUALAN</div><div class="value warn">${rupiah(state.sales.reduce((a, s) => a + saleMetrics(s).receivable, 0))}</div><div class="meta">Belum dihitung sebagai kas</div></div></div><div class="panel data-panel">${transactionTable(filtered)}</div>`;
 };
+// A system entry is orphaned only when its referenced source has genuinely
+// disappeared from a complete showroom data load. Never guess on load errors.
+function financeSourceStatus(t) {
+  if (!t.is_system || !t.source_id || state.lastLoadError) return null;
+  const sourceTables = {
+    vehicle_purchase: state.vehicles,
+    reconditioning: state.costs,
+    sale_income: state.sales,
+    sale_commission: state.sales,
+  };
+  if (!Object.prototype.hasOwnProperty.call(sourceTables, t.source_type)) return null;
+  return sourceTables[t.source_type].some((row) => row.id === t.source_id && row.showroom_id === t.showroom_id)
+    ? "linked" : "orphan";
+}
+function financeTransactionActions(t, mobile = false) {
+  const cls = mobile ? "card-actions" : "row-actions";
+  if (t.is_system) {
+    if (state.member?.role === "owner" && financeSourceStatus(t) === "orphan")
+      return `<div class="${cls}"><button class="button danger compact" data-delete-orphan-transaction="${t.id}">Hapus catatan</button></div>`;
+    return "—";
+  }
+  return `<div class="${cls}"><button class="button secondary compact" data-edit-transaction="${t.id}">Ubah</button>${state.member?.role === "owner" ? `<button class="button danger compact" data-delete-transaction="${t.id}">Hapus</button>` : ""}</div>`;
+}
 function transactionTable(rows) {
   const body = rows
     .map(
       (t) =>
-        `<tr><td>${t.transaction_date}</td><td class="${t.flow === "income" ? "up" : "bad"}">${t.flow === "income" ? "Masuk" : "Keluar"}</td><td>${esc(t.category)}</td><td>${esc(t.note || "-")} ${t.is_system ? '<span class="system-tag">Otomatis</span>' : ""}</td><td>${rupiah(t.amount)}</td><td>${t.is_system ? "—" : `<div class="row-actions"><button class="button secondary compact" data-edit-transaction="${t.id}">Ubah</button><button class="button danger compact" data-delete-transaction="${t.id}">Hapus</button></div>`}</td></tr>`,
+        `<tr><td>${t.transaction_date}</td><td class="${t.flow === "income" ? "up" : "bad"}">${t.flow === "income" ? "Masuk" : "Keluar"}</td><td>${esc(t.category)}</td><td>${esc(t.note || "-")} ${t.is_system ? ('<span class="system-tag">Otomatis</span>' + (financeSourceStatus(t) === "orphan" ? '<span class="orphan-tag">Sumber terhapus</span>' : "")) : ""}</td><td>${rupiah(t.amount)}</td><td>${financeTransactionActions(t)}</td></tr>`,
     )
     .join("");
   return (
@@ -1039,7 +1062,7 @@ function transactionTable(rows) {
     mobileCards(
       rows,
       (t) =>
-        `<article class="data-card"><div class="card-top"><div><small>${t.transaction_date}</small><h3>${esc(t.category)}</h3></div><strong class="${t.flow === "income" ? "up" : "bad"}">${t.flow === "income" ? "+" : "−"} ${rupiah(t.amount)}</strong></div><p>${esc(t.note || "-")} ${t.is_system ? '<span class="system-tag">Otomatis</span>' : ""}</p>${t.is_system ? "" : `<div class="card-actions"><button class="button secondary compact" data-edit-transaction="${t.id}">Ubah</button><button class="button danger compact" data-delete-transaction="${t.id}">Hapus</button></div>`}</article>`,
+        `<article class="data-card"><div class="card-top"><div><small>${t.transaction_date}</small><h3>${esc(t.category)}</h3></div><strong class="${t.flow === "income" ? "up" : "bad"}">${t.flow === "income" ? "+" : "−"} ${rupiah(t.amount)}</strong></div><p>${esc(t.note || "-")} ${t.is_system ? ('<span class="system-tag">Otomatis</span>' + (financeSourceStatus(t) === "orphan" ? '<span class="orphan-tag">Sumber terhapus</span>' : "")) : ""}</p>${financeTransactionActions(t, true)}</article>`,
     )
   );
 }
@@ -1084,6 +1107,19 @@ bindPage = function () {
           state.transactions.find((t) => t.id === b.dataset.editTransaction),
         )),
   );
+  document.querySelectorAll("[data-delete-orphan-transaction]").forEach((button) => {
+    button.onclick = () => {
+      const t = state.transactions.find((row) => row.id === button.dataset.deleteOrphanTransaction);
+      if (!t || state.member?.role !== "owner" || financeSourceStatus(t) !== "orphan")
+        return toast("Catatan ini masih terhubung atau data belum dimuat lengkap.", "error");
+      confirmAction(
+        "Hapus catatan keuangan tertinggal?",
+        `${t.category} · ${rupiah(t.amount)}. Sumber aslinya sudah dihapus. Hanya catatan kas ini yang akan dihapus, tanpa mengubah data kendaraan lain. Tindakan tidak dapat dibatalkan.`,
+        () => deleteRecord("cash_transactions", t.id),
+        "Hapus catatan",
+      );
+    };
+  });
   document
     .querySelectorAll("[data-delete-transaction]")
     .forEach(
@@ -1109,11 +1145,22 @@ bindPage = function () {
   );
 };
 async function deleteRecord(table, id) {
-  const { error } = await db.from(table).delete().eq("id", id);
+  const photoPaths = table === "vehicles"
+    ? state.photos.filter((photo) => photo.vehicle_id === id).map((photo) => photo.storage_path).filter(Boolean)
+    : [];
+  const { data, error } = await db.from(table).delete().eq("id", id).eq("showroom_id", state.showroom.id).select("id");
   if (error) return toast(error.message, "error");
-  await loadData();
+  if (!data?.length) return toast("Data tidak ditemukan atau akun tidak memiliki izin untuk menghapusnya.", "error");
+  let storageError = null;
+  if (photoPaths.length) {
+    const result = await db.storage.from("vehicle-photos").remove(photoPaths);
+    storageError = result.error;
+  }
+  const loaded = await loadData();
   renderShell();
-  toast("Data dihapus dan perhitungan diperbarui");
+  if (storageError) toast("Data terhapus, tetapi berkas foto lama gagal dibersihkan dari penyimpanan.", "error");
+  else if (!loaded) toast("Data terhapus. Sebagian informasi gagal dimuat ulang, coba segarkan halaman.", "error");
+  else toast("Data dihapus dan perhitungan diperbarui");
 }
 function confirmAction(title, message, onConfirm, actionLabel = "Ya, hapus") {
   const root = document.querySelector("#confirmRoot");
@@ -1424,7 +1471,18 @@ bindPage = function () {
     button.onclick = () => confirmAction("Hapus follow-up?", "Riwayat follow-up ini akan dihapus dari showroom.", () => deleteRecord("leads", button.dataset.deleteLead));
   });
   document.querySelectorAll("[data-delete-vehicle]").forEach((button) => {
-    button.onclick = () => confirmAction("Hapus kendaraan?", "Data kendaraan dan foto yang terkait akan dihapus. Riwayat penjualan atau biaya yang masih terkait dapat membuat penghapusan ditolak.", () => deleteRecord("vehicles", button.dataset.deleteVehicle));
+    button.onclick = () => {
+      const id = button.dataset.deleteVehicle;
+      const vehicle = state.vehicles.find((v) => v.id === id);
+      const saleCount = state.sales.filter((s) => s.vehicle_id === id).length;
+      const costCount = state.costs.filter((c) => c.vehicle_id === id).length;
+      const cashCount = state.transactions.filter((t) => t.vehicle_id === id || (t.is_system && t.source_type === "vehicle_purchase" && t.source_id === id)).length;
+      confirmAction(
+        "Hapus kendaraan beserta data terkait?",
+        `${vehicle ? `${vehicle.brand} ${vehicle.model}` : "Kendaraan ini"} dan seluruh data terkait akan dihapus: ${saleCount} penjualan, ${costCount} biaya rekondisi, dan ${cashCount} catatan kas (termasuk pembelian). Tindakan ini permanen.`,
+        () => deleteRecord("vehicles", id),
+      );
+    };
   });
   document.querySelectorAll("[data-edit-cost]").forEach((button) => {
     button.onclick = () => openModalV2("cost", state.costs.find((cost) => cost.id === button.dataset.editCost));
