@@ -564,3 +564,28 @@ body {
 .confirm-backdrop {
   z-index: 120 !important;
 }
+
+
+/* Historical auto-generated cash records without a source: owner-managed only. */
+.orphan-tag {
+  display: inline-block;
+  margin: 4px 0 0 6px;
+  padding: 3px 8px;
+  border: 1px solid rgba(237, 174, 73, .35);
+  border-radius: 100px;
+  background: rgba(237, 174, 73, .10);
+  color: #b07b2b;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+@media (prefers-color-scheme: dark) {
+  .orphan-tag { color: #efc580; }
+}
+.clean-shell .data-card .orphan-tag {
+  margin-top: 6px;
+  margin-left: 0;
+}
+.clean-shell .data-card .card-actions [data-delete-orphan-transaction] {
+  min-height: 38px;
+}
