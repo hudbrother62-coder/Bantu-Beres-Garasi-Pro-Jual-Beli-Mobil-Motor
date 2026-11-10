@@ -558,3 +558,9 @@ body {
     font-size: 19px !important;
   }
 }
+
+/* Confirmation dialogs must sit above dynamically appended edit modals.
+   Otherwise delete-photo confirmations are visually hidden and not clickable. */
+.confirm-backdrop {
+  z-index: 120 !important;
+}
