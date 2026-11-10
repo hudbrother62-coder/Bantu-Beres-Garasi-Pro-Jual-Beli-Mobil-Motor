@@ -1095,7 +1095,7 @@ bindPage = function () {
         (b.onclick = () =>
           confirmAction(
             "Hapus transaksi penjualan?",
-            "Kendaraan akan kembali ke status sebelumnya dan catatan kas terkait akan dibalik.",
+            "Kendaraan akan kembali ke status sebelumnya. Seluruh catatan pembayaran, komisi, dan kas yang berasal dari penjualan ini ikut dihapus. Pembelian dan rekondisi kendaraan tetap tersimpan.",
             () => deleteRecord("sales", b.dataset.deleteSale),
           )),
     );
@@ -1476,10 +1476,12 @@ bindPage = function () {
       const vehicle = state.vehicles.find((v) => v.id === id);
       const saleCount = state.sales.filter((s) => s.vehicle_id === id).length;
       const costCount = state.costs.filter((c) => c.vehicle_id === id).length;
+      const leadCount = state.leads.filter((lead) => lead.vehicle_id === id).length;
+      const photoCount = state.photos.filter((photo) => photo.vehicle_id === id).length;
       const cashCount = state.transactions.filter((t) => t.vehicle_id === id || (t.is_system && t.source_type === "vehicle_purchase" && t.source_id === id)).length;
       confirmAction(
         "Hapus kendaraan beserta data terkait?",
-        `${vehicle ? `${vehicle.brand} ${vehicle.model}` : "Kendaraan ini"} dan seluruh data terkait akan dihapus: ${saleCount} penjualan, ${costCount} biaya rekondisi, dan ${cashCount} catatan kas (termasuk pembelian). Tindakan ini permanen.`,
+        `${vehicle ? `${vehicle.brand} ${vehicle.model}` : "Kendaraan ini"} akan dihapus bersama ${saleCount} penjualan, ${costCount} biaya rekondisi, ${leadCount} follow-up, ${photoCount} foto, dan ${cashCount} transaksi kas terkait. Pembayaran penjualan juga ikut dihapus. Customer dan transaksi kendaraan lain tetap tersimpan. Tindakan ini permanen.`,
         () => deleteRecord("vehicles", id),
       );
     };
@@ -1494,7 +1496,15 @@ bindPage = function () {
     button.onclick = () => openModalV2("customer", state.customers.find((customer) => customer.id === button.dataset.editCustomer));
   });
   document.querySelectorAll("[data-delete-customer]").forEach((button) => {
-    button.onclick = () => confirmAction("Hapus customer?", "Riwayat penjualan atau follow-up yang terkait dapat membuat penghapusan ditolak.", () => deleteRecord("customers", button.dataset.deleteCustomer));
+    button.onclick = () => {
+      const id = button.dataset.deleteCustomer;
+      const relatedLeads = state.leads.filter((lead) => lead.customer_id === id).length;
+      confirmAction(
+        "Hapus customer beserta follow-up?",
+        `Data customer dan ${relatedLeads} follow-up miliknya akan dihapus. Riwayat penjualan serta transaksi keuangan tetap ada untuk akurasi laporan, tetapi tidak lagi terhubung ke customer ini.`,
+        () => deleteRecord("customers", id),
+      );
+    };
   });
   document.querySelectorAll("[data-delete-photo]").forEach((button) => {
     button.onclick = () => confirmDeletePhoto(button);
