@@ -1666,30 +1666,76 @@ function printReport(type) {
     .signature{display:grid;grid-template-columns:1fr 220px;gap:30px;margin-top:24px;break-inside:avoid}
     .signature-box{text-align:center;line-height:1.5}.signature-space{height:55px}
     .footer{margin-top:12px;padding-top:6px;border-top:1px solid #999;font-size:8px;color:#555}
-    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    .report-toolbar{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;background:#f7f8fc;border-bottom:1px solid #dfe2eb;box-shadow:0 2px 10px #00000012;font:14px Arial,Helvetica,sans-serif}
+    .report-toolbar strong{display:block;font-size:15px;margin-bottom:3px}
+    .report-toolbar span{display:block;font-size:12px;color:#515969;line-height:1.5}
+    .report-toolbar button{appearance:none;border:0;border-radius:7px;background:#3d256c;color:white;cursor:pointer;font:700 14px Arial,Helvetica,sans-serif;padding:12px 20px;min-height:44px;white-space:nowrap}
+    .report-toolbar button:focus-visible{outline:3px solid #8a6ee7;outline-offset:3px}
+    .report-scroll{overflow-x:auto;padding:18px}
+    .print-paper{width:1120px;margin:0 auto;padding:24px;background:white;box-shadow:0 4px 22px #00000016}
+    @media screen{body{background:#eef0f5}.report-table{min-width:1020px}}
+    @media screen and (max-width:650px){.report-toolbar{position:sticky;top:0;flex-direction:column;align-items:stretch;gap:9px;padding:12px}.report-toolbar button{width:100%}.report-scroll{padding:10px}}
+    @media print{
+      body{background:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      .report-toolbar{display:none!important}
+      .report-scroll{padding:0!important;overflow:visible!important}
+      .print-paper{width:auto!important;margin:0!important;padding:0!important;box-shadow:none!important}
+      .report-table{width:100%!important;min-width:0!important;table-layout:fixed!important}
+      .report-table th,.report-table td{font-size:8px;white-space:normal;overflow-wrap:anywhere;word-break:normal;padding:4px 3px}
+    }
   </style></head><body>
+    <nav class="report-toolbar" aria-label="Aksi laporan"><div><strong>Pratinjau laporan</strong><span>Periksa tabel, lalu cetak atau simpan sebagai PDF. Geser tabel untuk melihat semua kolom di HP.</span></div><button type="button" onclick="window.print()">Cetak / Simpan PDF</button></nav>
+    <div class="report-scroll"><main class="print-paper">
     <header class="report-head"><div class="identity"><h1>${reportCell(report.title)}</h1><strong>${reportCell(showroom.name)}</strong><br>${reportCell(showroom.address || showroom.city)}<br>${reportCell(contact)}</div><div class="meta">Dicetak: ${reportCell(generatedAt)}<br>Penanggung jawab: ${reportCell(showroom.owner_name)}<br>Jenis usaha: ${showroom.business_type === "car" ? "Mobil" : showroom.business_type === "motorcycle" ? "Motor" : "Mobil & Motor"}</div></header>
     <table class="summary"><tbody>${summaryRows}</tbody></table>
     <table class="report-table"><thead><tr>${report.columns.map((column) => "<th>" + reportCell(column) + "</th>").join("")}</tr></thead><tbody>${tableRows}</tbody></table>
     <section class="signature"><div></div><div class="signature-box">${reportCell(showroom.city)}, ${reportDate(new Date())}<br>Pemilik/Penanggung Jawab<div class="signature-space"></div><strong>${reportCell(showroom.owner_name)}</strong></div></section>
     <footer class="footer">Dokumen dibuat dari Bantu Beres Garasi Pro berdasarkan data showroom yang sedang aktif.</footer>
+    </main></div>
   </body></html>`;
-  const frame = document.createElement("iframe");
-  frame.setAttribute("aria-hidden", "true");
-  frame.style.cssText = "position:fixed;width:0;height:0;border:0;right:0;bottom:0";
-  frame.onload = () => {
-    const printWindow = frame.contentWindow;
-    printWindow.focus();
-    printWindow.print();
-    setTimeout(() => frame.remove(), 1000);
+  // iOS Safari does not reliably print hidden/zero-size iframe documents.
+  // Open the ready-to-print report synchronously inside the user's click gesture.
+  const showInCurrentTab = () => {
+    const reportUrl = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+    window.location.assign(reportUrl);
   };
-  frame.srcdoc = html;
-  document.body.appendChild(frame);
+  const reportWindow = window.open("", "_blank");
+  if (!reportWindow) {
+    // Popup-blocked browsers still get a usable print page and browser Back.
+    showInCurrentTab();
+    return;
+  }
+  try {
+    reportWindow.opener = null;
+    reportWindow.document.open();
+    reportWindow.document.write(html);
+    // Desktop browsers support an immediate print dialog. Mobile users retain
+    // the visible print button to invoke the native print/share sheet by tap.
+    if (!/iPad|iPhone|iPod|Android/i.test(navigator.userAgent)) {
+      reportWindow.addEventListener("load", () => {
+        reportWindow.focus();
+        reportWindow.print();
+      }, { once: true });
+    }
+    reportWindow.document.close();
+    reportWindow.focus();
+  } catch (error) {
+    console.error("Gagal membuka jendela laporan:", error);
+    reportWindow.close();
+    showInCurrentTab();
+  }
 }
 const bindPageBeforePrintableReports = bindPage;
 bindPage = function () {
   bindPageBeforePrintableReports();
   document.querySelectorAll("[data-print]").forEach((button) => {
-    button.onclick = () => printReport(button.dataset.print);
+    button.onclick = () => {
+      try {
+        printReport(button.dataset.print);
+      } catch (error) {
+        console.error("Gagal membuat laporan:", error);
+        toast("Laporan gagal dibuka. Coba muat ulang halaman lalu cetak lagi.");
+      }
+    };
   });
 };
