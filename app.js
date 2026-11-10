@@ -179,18 +179,27 @@ async function loadData() {
       .eq("showroom_id", id)
       .order("sort_order"),
   ]);
+  const failures = [
+    ["Kendaraan", v], ["Rekondisi", c], ["Customer", cu], ["Follow-up", l],
+    ["Penjualan", s], ["Akun kas", a], ["Transaksi", t], ["Foto", ph],
+  ].filter(([, result]) => result.error).map(([label]) => label);
+  state.lastLoadError = failures.length
+    ? "Gagal memuat: " + failures.join(", ") + ". Data lama tetap ditampilkan; coba muat ulang."
+    : null;
   Object.assign(state, {
-    vehicles: v.data || [],
-    costs: c.data || [],
-    customers: cu.data || [],
-    leads: l.data || [],
-    sales: s.data || [],
-    accounts: a.data || [],
-    transactions: t.data || [],
-    photos: ph.data || [],
+    vehicles: v.error ? state.vehicles : v.data || [],
+    costs: c.error ? state.costs : c.data || [],
+    customers: cu.error ? state.customers : cu.data || [],
+    leads: l.error ? state.leads : l.data || [],
+    sales: s.error ? state.sales : s.data || [],
+    accounts: a.error ? state.accounts : a.data || [],
+    transactions: t.error ? state.transactions : t.data || [],
+    photos: ph.error ? state.photos : ph.data || [],
   });
+  if (failures.length) console.error("Gagal memuat modul Garasi Pro:", failures);
   if (state.member?.role === "owner") await loadTeam();
   else state.team = [];
+  return !failures.length;
 }
 function renderAuth() {
   app.innerHTML = `<main class="auth"><section class="auth-card"><div class="brand">${mark()}<span>Bantu Beres Garasi Pro</span></div><h1>Kelola showroom lebih jelas.</h1><p>Catat mobil atau motor, hitung modal sebenarnya, dan pantau penjualan per unit.</p><div class="tabs"><button class="active" data-auth="login">Masuk</button><button data-auth="register">Daftar</button></div><form id="authForm"><label>Username</label><input name="username" required autocomplete="username" placeholder="Contoh: garasimaju"><label>Kata sandi</label><input type="password" name="password" required autocomplete="current-password" minlength="6" placeholder="Minimal 6 karakter"><button class="button full">Masuk ke aplikasi</button></form><p style="text-align:center;margin-top:16px"><a href="./recovery.html">Lupa password? Gunakan kode pemulihan</a></p></section></main>`;
@@ -243,30 +252,27 @@ async function authSubmit(e) {
   const submit = form.querySelector('button[type="submit"],button:not([type])');
   submit.disabled = true;
   submit.textContent = register ? "Membuat akun..." : "Memeriksa akun...";
-  const r = register
-    ? await registerUsernameAccount(
-        String(username).trim(),
-        password,
-        f.get("name"),
-      )
-    : await db.auth.signInWithPassword({ email, password });
-  if (r.error) {
-    submit.disabled = false;
-    submit.textContent = register ? "Buat akun" : "Masuk ke aplikasi";
-    return toast(r.error.message);
+  try {
+    const r = register
+      ? await registerUsernameAccount(String(username).trim(), password, f.get("name"))
+      : await db.auth.signInWithPassword({ email, password });
+    if (r.error) return toast(r.error.message, "error");
+    const login = register
+      ? await db.auth.signInWithPassword({ email, password })
+      : r;
+    if (login.error || !login.data?.session)
+      return toast(login.error?.message || "Sesi akun belum terbentuk. Coba masuk kembali.", "error");
+    state.session = login.data.session;
+    await loadShowroom();
+  } catch (error) {
+    console.error("Gagal masuk/daftar Garasi Pro:", error);
+    toast("Koneksi gagal. Periksa internet lalu coba lagi.", "error");
+  } finally {
+    if (form.isConnected) {
+      submit.disabled = false;
+      submit.textContent = register ? "Buat akun" : "Masuk ke aplikasi";
+    }
   }
-  const login = register
-    ? await db.auth.signInWithPassword({ email, password })
-    : r;
-  if (login.error || !login.data.session) {
-    submit.disabled = false;
-    submit.textContent = register ? "Buat akun" : "Masuk ke aplikasi";
-    return toast(
-      login.error?.message || "Sesi akun belum terbentuk. Coba masuk kembali.",
-    );
-  }
-  state.session = login.data.session;
-  await loadShowroom();
 }
 function renderOnboarding() {
   app.innerHTML = `<main class="auth"><section class="onboarding"><div class="brand">${mark()}<span>Bantu Beres Garasi Pro</span></div><h1>Siapkan showroom kamu</h1><p>Jenis usaha menentukan formulir kendaraan, kategori biaya, katalog, dan laporan akun ini.</p><div class="panel"><form id="setupForm"><label>Nama showroom</label><input name="name" required placeholder="Contoh: Garasi Maju Jaya"><div class="form-grid"><div><label>Kota</label><input name="city" placeholder="Contoh: Malang"></div><div><label>Nomor WhatsApp</label><input name="phone" placeholder="08xxxxxxxxxx"></div></div><label>Jenis usaha</label><div class="choice-grid" id="typeChoices"><button type="button" class="choice selected" data-type="car"><strong>Showroom Mobil</strong><span>Kelola stok dan penjualan mobil.</span></button><button type="button" class="choice" data-type="motorcycle"><strong>Showroom Motor</strong><span>Kelola stok dan penjualan motor.</span></button><button type="button" class="choice" data-type="both"><strong>Mobil + Motor</strong><span>Gunakan dua kategori kendaraan.</span></button></div><input type="hidden" name="business_type" value="car"><button class="button full">Buat ruang showroom</button></form></div></section></main>`;
@@ -500,7 +506,8 @@ function bindPage() {
   if (q) {
     const filter = () => {
       const term = q.value.toLowerCase();
-      document.querySelector("#vehicleTable").innerHTML = vehicleTable(
+      const table = document.querySelector("#vehicleTable");
+      table.innerHTML = vehicleTable(
         state.vehicles.filter(
           (v) =>
             (!term ||
@@ -511,6 +518,12 @@ function bindPage() {
             (!st.value || v.status === st.value),
         ),
       );
+      // Rows were recreated: hide forbidden actions and attach their handlers again.
+      if (currentRole() === "admin")
+        table.querySelectorAll("[data-delete-vehicle]").forEach((button) => button.remove());
+      if (currentRole() === "sales")
+        table.querySelectorAll("[data-edit-vehicle],[data-delete-vehicle]").forEach((button) => button.remove());
+      bindPage();
     };
     q.oninput = filter;
     st.onchange = filter;
@@ -576,6 +589,12 @@ async function saveForm(e, type, id, modal) {
   const formData = new FormData(e.currentTarget);
   const photoFiles =
     type === "vehicle" ? formData.getAll("photos").filter((f) => f?.size) : [];
+  // Validate photos before writing the vehicle, avoiding partial saves for invalid files.
+  const invalidPhoto = photoFiles.find((file) =>
+    file.size > 5 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type),
+  );
+  if (invalidPhoto)
+    return toast("Foto harus JPG, PNG, atau WebP dengan ukuran maksimal 5 MB.", "error");
   const raw = Object.fromEntries(formData);
   delete raw.photos;
   Object.keys(raw).forEach((k) => {
@@ -598,6 +617,12 @@ async function saveForm(e, type, id, modal) {
   numberFields.forEach((k) => {
     if (k in raw && raw[k] != null) raw[k] = Number(raw[k]);
   });
+  if (raw.next_follow_up_at) {
+    const followUp = new Date(raw.next_follow_up_at);
+    if (Number.isNaN(followUp.getTime()))
+      return toast("Jadwal follow-up tidak valid.", "error");
+    raw.next_follow_up_at = followUp.toISOString();
+  }
   const table = {
     vehicle: "vehicles",
     cost: "vehicle_costs",
@@ -806,7 +831,16 @@ function renderShellApproved() {
 }
 
 /* Garasi Pro UX v2 — mobile, theme, accounting and reversible transactions */
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => {
+  const date = new Date();
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+};
+function localDateTimeValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
 let vehicleKind = "all",
   financePeriod = "all";
 const logo = (variant = "mark") =>
@@ -1081,9 +1115,9 @@ async function deleteRecord(table, id) {
   renderShell();
   toast("Data dihapus dan perhitungan diperbarui");
 }
-function confirmAction(title, message, onConfirm) {
+function confirmAction(title, message, onConfirm, actionLabel = "Ya, hapus") {
   const root = document.querySelector("#confirmRoot");
-  root.innerHTML = `<div class="modal-backdrop confirm-backdrop"><section class="confirm-box"><div class="confirm-icon">!</div><h2>${esc(title)}</h2><p>${esc(message)}</p><div class="modal-foot"><button class="button secondary" data-cancel>Batal</button><button class="button danger" data-confirm>Ya, hapus</button></div></section></div>`;
+  root.innerHTML = `<div class="modal-backdrop confirm-backdrop"><section class="confirm-box"><div class="confirm-icon">!</div><h2>${esc(title)}</h2><p>${esc(message)}</p><div class="modal-foot"><button class="button secondary" data-cancel>Batal</button><button class="button danger" data-confirm>${esc(actionLabel)}</button></div></section></div>`;
   root.querySelector("[data-cancel]").onclick = () => (root.innerHTML = "");
   root.querySelector("[data-confirm]").onclick = async () => {
     root.innerHTML = "";
@@ -1091,15 +1125,18 @@ function confirmAction(title, message, onConfirm) {
   };
 }
 function fieldSelect(name, label, items, value = "", other = true) {
-  return `<div><label>${label}</label><select name="${name}" data-other-select="${other ? "1" : "0"}">${items
+  const selected = String(value ?? "");
+  const choices = [...items];
+  // Preserve stored custom values (and sale-managed vehicle statuses) on edit.
+  if (selected && !choices.some((x) => String(Array.isArray(x) ? x[0] : x) === selected))
+    choices.push([selected, selected]);
+  const placeholder = other && !selected ? '<option value="" selected>Pilih opsi</option>' : "";
+  return `<div><label>${esc(label)}</label><select name="${esc(name)}" data-other-select="${other ? "1" : "0"}">${placeholder}${choices
     .map((x) => {
       const val = Array.isArray(x) ? x[0] : x,
         txt = Array.isArray(x) ? x[1] : x;
-      return `<option value="${esc(val)}" ${val === value ? "selected" : ""}>${esc(txt)}</option>`;
-    })
-    .join(
-      "",
-    )}${other ? '<option value="__other">Lainnya…</option>' : ""}</select><input class="other-input" data-other-for="${name}" placeholder="Tulis pilihan lainnya" hidden></div>`;
+      return `<option value="${esc(val)}" ${String(val) === selected ? "selected" : ""}>${esc(txt)}</option>`;
+    }).join("")}${other ? '<option value="__other">Lainnya…</option>' : ""}</select><input class="other-input" data-other-for="${esc(name)}" aria-label="Isi pilihan lainnya untuk ${esc(label)}" placeholder="Tulis pilihan lainnya" hidden></div>`;
 }
 function openModalV2(type, data = {}) {
   const active = state.vehicles.filter(
@@ -1147,7 +1184,7 @@ function openModalV2(type, data = {}) {
       ],
       data.status || "new",
       false,
-    )}<div><label>Follow-up berikutnya</label><input type="datetime-local" name="next_follow_up_at" value="${data.next_follow_up_at ? new Date(data.next_follow_up_at).toISOString().slice(0,16) : ""}"></div><div><label>Nilai penawaran</label><input type="number" min="0" name="offered_price" value="${data.offered_price || ""}"></div><div class="span-2"><label>Catatan komunikasi</label><textarea name="note" placeholder="Ringkasan percakapan, kebutuhan customer, atau rencana tindak lanjut">${esc(data.note || "")}</textarea></div></div>`;
+    )}<div><label>Follow-up berikutnya</label><input type="datetime-local" name="next_follow_up_at" value="${localDateTimeValue(data.next_follow_up_at)}"></div><div><label>Nilai penawaran</label><input type="number" min="0" name="offered_price" value="${data.offered_price || ""}"></div><div class="span-2"><label>Catatan komunikasi</label><textarea name="note" placeholder="Ringkasan percakapan, kebutuhan customer, atau rencana tindak lanjut">${esc(data.note || "")}</textarea></div></div>`;
   }
   if (type === "vehicle") {
     title = data.id ? "Ubah kendaraan" : "Tambah kendaraan";
@@ -1262,6 +1299,9 @@ function openModalV2(type, data = {}) {
   backdrop.className = "modal-backdrop";
   backdrop.innerHTML = `<section class="modal"><header class="modal-title"><div><h2>${title}</h2><p>${subtitle}</p></div><button type="button" class="modal-close" aria-label="Tutup">×</button></header><form class="modal-body">${body}<footer class="modal-foot"><button type="button" class="button secondary" data-close>Batal</button><button class="button" type="submit">Simpan</button></footer></form></section>`;
   document.body.append(backdrop);
+  backdrop.querySelectorAll("[data-delete-photo]").forEach((button) => {
+    button.onclick = () => confirmDeletePhoto(button);
+  });
   requestAnimationFrame(() => backdrop.classList.add("visible"));
   const close = () => {
     backdrop.classList.remove("visible");
@@ -1277,23 +1317,42 @@ function openModalV2(type, data = {}) {
       (s.onchange = () => {
         const i = backdrop.querySelector(`[data-other-for="${s.name}"]`);
         i.hidden = s.value !== "__other";
+        i.required = !i.hidden;
         if (!i.hidden) i.focus();
       }),
   );
   backdrop.querySelector("form").onsubmit = async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
+    let missingCustomValue = false;
     form.querySelectorAll('[data-other-select="1"]').forEach((s) => {
-      if (s.value === "__other")
-        s.value = form.querySelector(`[data-other-for="${s.name}"]`).value;
+      if (s.value !== "__other") return;
+      const input = form.querySelector(`[data-other-for="${s.name}"]`);
+      const customValue = input.value.trim();
+      if (!customValue) {
+        missingCustomValue = true;
+        input.required = true;
+        input.reportValidity();
+        return;
+      }
+      // Assigning an unknown value to <select> clears the selection.
+      // Create an actual option so FormData receives the user's text.
+      s.add(new Option(customValue, customValue, true, true));
     });
+    if (missingCustomValue) return;
     const submit = form.querySelector('[type="submit"]');
     submit.disabled = true;
     submit.textContent = "Menyimpan…";
-    await saveForm(e, type, data.id, backdrop);
-    if (document.body.contains(backdrop)) {
-      submit.disabled = false;
-      submit.textContent = "Simpan";
+    try {
+      await saveForm(e, type, data.id, backdrop);
+    } catch (error) {
+      console.error("Gagal menyimpan data Garasi Pro:", error);
+      toast("Koneksi gagal saat menyimpan. Coba lagi.", "error");
+    } finally {
+      if (document.body.contains(backdrop)) {
+        submit.disabled = false;
+        submit.textContent = "Simpan";
+      }
     }
   };
 }
@@ -1303,6 +1362,40 @@ function photoManager(vehicleId) {
   return rows.length
     ? `<div class="photo-grid">${rows.map((p) => `<figure><img src="${esc(p.public_url)}" alt="Foto kendaraan"><figcaption>${p.is_primary ? "Sampul" : "Foto tambahan"} <button type="button" data-delete-photo="${p.id}" data-path="${esc(p.storage_path)}">Hapus</button></figcaption></figure>`).join("")}</div>`
     : "";
+}
+function confirmDeletePhoto(button) {
+  const photo = state.photos.find((item) => item.id === button.dataset.deletePhoto);
+  if (!photo) return toast("Foto tidak ditemukan. Muat ulang halaman.", "error");
+  confirmAction("Hapus foto kendaraan?", "Foto ini akan dihapus dari galeri kendaraan.", async () => {
+    try {
+      const { error } = await db.from("vehicle_photos").delete()
+        .eq("id", photo.id).eq("showroom_id", state.showroom.id);
+      if (error) return toast(error.message, "error");
+      // If the cover is deleted, restore the next available image as cover.
+      if (photo.is_primary) {
+        const next = state.photos.find((item) => item.vehicle_id === photo.vehicle_id && item.id !== photo.id);
+        if (next) {
+          const { error: primaryError } = await db.from("vehicle_photos")
+            .update({ is_primary: true }).eq("id", next.id).eq("showroom_id", state.showroom.id);
+          if (primaryError) console.warn("Gagal menandai foto sampul baru:", primaryError.message);
+        }
+        const { error: coverError } = await db.from("vehicles")
+          .update({ cover_url: next?.public_url || null })
+          .eq("id", photo.vehicle_id).eq("showroom_id", state.showroom.id);
+        if (coverError) console.warn("Gagal memperbarui foto sampul:", coverError.message);
+      }
+      const { error: storageError } = photo.storage_path
+        ? await db.storage.from("vehicle-photos").remove([photo.storage_path])
+        : { error: null };
+      if (storageError) console.warn("Pembersihan foto storage tertunda:", storageError.message);
+      button.closest(".modal-backdrop")?.remove();
+      await loadData();
+      renderShell();
+      toast(storageError ? "Data foto dihapus, tetapi file lama belum terhapus dari penyimpanan." : "Foto kendaraan dihapus", storageError ? "error" : "success");
+    } catch (error) {
+      toast(error?.message || "Gagal menghapus foto kendaraan.", "error");
+    }
+  });
 }
 
 function leadDisplayStatus(value) {
@@ -1346,16 +1439,7 @@ bindPage = function () {
     button.onclick = () => confirmAction("Hapus customer?", "Riwayat penjualan atau follow-up yang terkait dapat membuat penghapusan ditolak.", () => deleteRecord("customers", button.dataset.deleteCustomer));
   });
   document.querySelectorAll("[data-delete-photo]").forEach((button) => {
-    button.onclick = () => confirmAction("Hapus foto kendaraan?", "Foto ini akan dihapus dari galeri kendaraan.", async () => {
-      const photo = state.photos.find((item) => item.id === button.dataset.deletePhoto);
-      const { error: storageError } = photo?.storage_path ? await db.storage.from("vehicle-photos").remove([photo.storage_path]) : { error: null };
-      if (storageError) return toast(storageError.message, "error");
-      const { error } = await db.from("vehicle_photos").delete().eq("id", button.dataset.deletePhoto);
-      if (error) return toast(error.message, "error");
-      await loadData();
-      renderShell();
-      toast("Foto kendaraan dihapus");
-    });
+    button.onclick = () => confirmDeletePhoto(button);
   });
 };
 
@@ -1467,7 +1551,9 @@ function renderRolePage() {
   const views = { dashboard: roleDashboard, vehicles: currentRole() === "sales" ? () => {
     const rows=state.vehicles; return `${pageHead("Kendaraan", "Lihat unit yang tersedia dan target harga jual.")}<div class="panel data-panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Unit</th><th>Jenis</th><th>Target jual</th><th>Status</th></tr></thead><tbody>${rows.map((v)=>`<tr><td><strong>${esc(v.brand)} ${esc(v.model)}</strong><br><small>${esc(v.code)} · ${v.year || "-"}</small></td><td>${v.vehicle_type === "car" ? "Mobil" : "Motor"}</td><td>${rupiah(v.target_price)}</td><td>${status(v.status)}</td></tr>`).join("") || '<tr><td colspan="4"><div class="empty">Belum ada kendaraan.</div></td></tr>'}</tbody></table></div></div>`;
   } : ownerVehiclesView, costs, customers: customersRoleView, leads: leadsRoleView, sales: salesRoleView, finance, reports, team: teamView, settings };
-  page.innerHTML = views[state.view]();
+  page.innerHTML = (state.lastLoadError
+    ? `<div class="panel" role="alert" style="margin-bottom:12px;border:1px solid #d97706;padding:14px">${esc(state.lastLoadError)}</div>`
+    : "") + views[state.view]();
   if (currentRole() === "admin")
     page.querySelectorAll("[data-delete-vehicle],[data-delete-cost],[data-delete-sale],[data-delete-transaction],[data-delete-customer]").forEach((el)=>el.remove());
   if (currentRole() === "sales")
@@ -1488,7 +1574,13 @@ function renderRoleShell() {
   app.querySelectorAll("[data-menu]").forEach((b)=>b.onclick=()=>{shell.classList.add("drawer-open");document.body.classList.add("no-scroll")});
   app.querySelectorAll("[data-menu-close]").forEach((b)=>b.onclick=close);
   app.querySelectorAll("[data-logout]").forEach((b)=>b.onclick=async()=>{await db.auth.signOut();state={...state,session:null,showroom:null,member:null,team:[]};renderAuth()});
-  app.querySelector("[data-refresh]").onclick=async()=>{await loadData();renderPage();toast("Data berhasil diperbarui")};
+  app.querySelector("[data-refresh]").onclick=async()=>{
+    try {
+      const allLoaded=await loadData();
+      renderPage();
+      if(allLoaded) toast("Data berhasil diperbarui");
+    } catch(error) { console.error("Gagal memuat ulang:",error); toast("Muat ulang gagal. Periksa koneksi internet.","error"); }
+  };
   app.querySelector("[data-theme]").onclick=()=>{setTheme(document.documentElement.dataset.theme==="dark"?"light":"dark");renderShell()};
   app.querySelector("[data-collapse]").onclick=()=>{shell.classList.toggle("sidebar-collapsed");localStorage.setItem("garasi-sidebar",shell.classList.contains("sidebar-collapsed")?"1":"0")};
   if(localStorage.getItem("garasi-sidebar")==="1") shell.classList.add("sidebar-collapsed");
@@ -1500,7 +1592,7 @@ bindPage = function () {
   document.querySelector("[data-add-team]")?.addEventListener("click",()=>openTeamModal());
   document.querySelectorAll("[data-edit-team]").forEach((b)=>b.onclick=()=>openTeamModal(state.team.find((m)=>m.user_id===b.dataset.editTeam)));
   document.querySelectorAll("[data-reset-team]").forEach((b)=>b.onclick=()=>openTeamModal(state.team.find((m)=>m.user_id===b.dataset.resetTeam),true));
-  document.querySelectorAll("[data-toggle-team]").forEach((b)=>b.onclick=()=>{const m=state.team.find((x)=>x.user_id===b.dataset.toggleTeam);confirmAction(m.is_active?"Nonaktifkan akun?":"Aktifkan akun?",m.is_active?"Akun langsung kehilangan akses ke data showroom.":"Akun dapat kembali masuk menggunakan username dan passwordnya.",async()=>{try{await teamRequest("set_active",{user_id:m.user_id,is_active:!m.is_active});await loadTeam();renderShell();toast(`Akun ${m.is_active?"dinonaktifkan":"diaktifkan"}`)}catch(error){toast(error.message,"error")}})});
+  document.querySelectorAll("[data-toggle-team]").forEach((b)=>b.onclick=()=>{const m=state.team.find((x)=>x.user_id===b.dataset.toggleTeam);confirmAction(m.is_active?"Nonaktifkan akun?":"Aktifkan akun?",m.is_active?"Akun langsung kehilangan akses ke data showroom.":"Akun dapat kembali masuk menggunakan username dan passwordnya.",async()=>{try{await teamRequest("set_active",{user_id:m.user_id,is_active:!m.is_active});await loadTeam();renderShell();toast(`Akun ${m.is_active?"dinonaktifkan":"diaktifkan"}`)}catch(error){toast(error.message,"error")}},m.is_active?"Ya, nonaktifkan":"Ya, aktifkan")});
 };
 renderPage = renderRolePage;
 renderShell = renderRoleShell;
@@ -1734,8 +1826,16 @@ bindPage = function () {
         printReport(button.dataset.print);
       } catch (error) {
         console.error("Gagal membuat laporan:", error);
-        toast("Laporan gagal dibuka. Coba muat ulang halaman lalu cetak lagi.");
+        toast("Laporan gagal dibuka. Coba muat ulang halaman lalu cetak lagi.", "error");
       }
+    };
+  });
+  // Navigation CTAs inserted into the page after the main sidebar is bound.
+  document.querySelectorAll("#page [data-view]").forEach((button) => {
+    button.onclick = () => {
+      if (!allowedNavigation().some(([id]) => id === button.dataset.view)) return;
+      state.view = button.dataset.view;
+      renderShell();
     };
   });
 };
