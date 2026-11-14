@@ -1,3 +1,5 @@
+import { agingView, bindAgingPage, stockAgeDays } from "./stock-aging.js";
+
 const SUPABASE_URL = "https://enmbebmcjenngzjcnbma.supabase.co";
 const SUPABASE_KEY = "sb_publishable_NCTMqAr8tJ6bswIJQclCbA_HU96WUA5";
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -5,6 +7,7 @@ const app = document.querySelector("#app");
 const mobileIcons = {
   dashboard: "home",
   vehicles: "directions_car",
+  aging: "hourglass_top",
   sales: "receipt_long",
   finance: "account_balance_wallet",
   costs: "build",
@@ -642,6 +645,12 @@ async function saveForm(e, type, id, modal) {
     raw.sales_person_id = state.session.user.id;
   if (type === "vehicle") {
     delete raw.code;
+    if (raw.stock_date_mode === "input") {
+      raw.stock_start_date = null;
+    } else if (raw.stock_date_mode === "manual") {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(raw.stock_start_date || "") || raw.stock_start_date > today())
+        return toast("Tanggal awal stok harus valid dan tidak boleh di masa depan.", "error");
+    }
     if (state.showroom.business_type !== "both")
       raw.vehicle_type = state.showroom.business_type;
   }
@@ -744,10 +753,7 @@ dashboard = function () {
     .filter((t) => t.flow === "expense")
     .reduce((sum, t) => sum + Number(t.amount || 0), 0);
   const unpaid = state.sales.filter((s) => s.payment_status !== "paid");
-  const old = stock.filter(
-    (v) =>
-      v.purchase_date && (Date.now() - new Date(v.purchase_date)) / 864e5 > 90,
-  );
+  const old = stock.filter((v) => (stockAgeDays(v) ?? -1) > 90);
   return `${pageHead("Dashboard", "Ringkasan showroom dan aktivitas terbaru.")}
     <section class="hero-summary"><div><span>Nilai stok aktif</span><strong>${rupiah(capital)}</strong><small>${stock.length} kendaraan tersedia</small></div><span class="material-symbols-rounded">garage_home</span></section>
     <div class="metric-grid dashboard-metrics"><article class="metric"><div class="label">UNIT TERJUAL</div><div class="value">${state.sales.length}</div><div class="meta">Seluruh periode</div></article><article class="metric"><div class="label">SALDO KAS</div><div class="value up">${rupiah(income - expense)}</div><div class="meta">Arus kas tercatat</div></article><article class="metric"><div class="label">PIUTANG</div><div class="value warn">${unpaid.length}</div><div class="meta">Belum lunas</div></article><article class="metric"><div class="label">REKONDISI</div><div class="value">${rupiah(state.costs.reduce((a, c) => a + Number(c.amount || 0), 0))}</div><div class="meta">Total biaya</div></article></div>
@@ -862,6 +868,7 @@ toast = function (msg, kind = "success") {
 const navV2 = [
   ["dashboard", "Beranda", "⌂"],
   ["vehicles", "Kendaraan", "▣"],
+  ["aging", "Stok Mengendap", "hourglass_top"],
   ["sales", "Penjualan", "✓"],
   ["finance", "Keuangan", "Rp"],
   ["costs", "Rekondisi", "◇"],
@@ -1268,7 +1275,7 @@ function openModalV2(type, data = {}) {
         ["Listrik", "Listrik"],
       ],
       data.fuel_type || "",
-    )}<div><label>Kapasitas mesin (cc)</label><input type="number" min="0" name="engine_capacity" value="${data.engine_capacity || ""}"></div><div><label>Harga beli</label><input type="number" min="0" name="purchase_price" required value="${data.purchase_price || 0}"></div><div><label>Target jual</label><input type="number" min="0" name="target_price" value="${data.target_price || 0}"></div><div><label>Harga minimum</label><input type="number" min="0" name="minimum_price" value="${data.minimum_price || ""}"></div><div><label>Tanggal beli</label><input type="date" name="purchase_date" value="${data.purchase_date || today()}"></div>${fieldSelect(
+    )}<div><label>Kapasitas mesin (cc)</label><input type="number" min="0" name="engine_capacity" value="${data.engine_capacity || ""}"></div><div><label>Harga beli</label><input type="number" min="0" name="purchase_price" required value="${data.purchase_price || 0}"></div><div><label>Target jual</label><input type="number" min="0" name="target_price" value="${data.target_price || 0}"></div><div><label>Harga minimum</label><input type="number" min="0" name="minimum_price" value="${data.minimum_price || ""}"></div><div><label>Tanggal beli</label><input type="date" name="purchase_date" value="${data.purchase_date || today()}"></div>${stockDateInputs(data)}${fieldSelect(
       "status",
       "Status unit",
       [
@@ -1346,6 +1353,19 @@ function openModalV2(type, data = {}) {
   backdrop.className = "modal-backdrop";
   backdrop.innerHTML = `<section class="modal"><header class="modal-title"><div><h2>${title}</h2><p>${subtitle}</p></div><button type="button" class="modal-close" aria-label="Tutup">×</button></header><form class="modal-body">${body}<footer class="modal-foot"><button type="button" class="button secondary" data-close>Batal</button><button class="button" type="submit">Simpan</button></footer></form></section>`;
   document.body.append(backdrop);
+  const dateMode = backdrop.querySelector("[data-stock-date-mode]");
+  if (dateMode) {
+    const updateDateMode = () => {
+      const field = backdrop.querySelector("[data-stock-start-date]");
+      const wrap = backdrop.querySelector("[data-stock-manual]");
+      const manual = dateMode.value === "manual";
+      wrap.hidden = !manual;
+      field.disabled = !manual;
+      field.required = manual;
+    };
+    dateMode.addEventListener("change", updateDateMode);
+    updateDateMode();
+  }
   backdrop.querySelectorAll("[data-delete-photo]").forEach((button) => {
     button.onclick = () => confirmDeletePhoto(button);
   });
@@ -1529,10 +1549,10 @@ function roleLabel(role = currentRole()) {
 }
 function allowedNavigation() {
   const ids = currentRole() === "owner"
-    ? ["dashboard", "vehicles", "sales", "finance", "costs", "customers", "leads", "reports", "team", "settings"]
+    ? ["dashboard", "vehicles", "aging", "sales", "finance", "costs", "customers", "leads", "reports", "team", "settings"]
     : currentRole() === "sales"
-      ? ["dashboard", "vehicles", "customers", "leads", "sales", "reports"]
-      : ["dashboard", "vehicles", "sales", "finance", "costs", "customers", "reports"];
+      ? ["dashboard", "vehicles", "aging", "customers", "leads", "sales", "reports"]
+      : ["dashboard", "vehicles", "aging", "sales", "finance", "costs", "customers", "reports"];
   const labels = Object.fromEntries(navV2.map(([id, label, icon]) => [id, [label, icon]]));
   labels.team = ["Tim", "groups"];
   return ids.map((id) => [id, labels[id]?.[0] || id, labels[id]?.[1] || mobileIcons[id] || "circle"]);
@@ -1618,7 +1638,7 @@ function renderRolePage() {
   const page = document.querySelector("#page");
   const views = { dashboard: roleDashboard, vehicles: currentRole() === "sales" ? () => {
     const rows=state.vehicles; return `${pageHead("Kendaraan", "Lihat unit yang tersedia dan target harga jual.")}<div class="panel data-panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Unit</th><th>Jenis</th><th>Target jual</th><th>Status</th></tr></thead><tbody>${rows.map((v)=>`<tr><td><strong>${esc(v.brand)} ${esc(v.model)}</strong><br><small>${esc(v.code)} · ${v.year || "-"}</small></td><td>${v.vehicle_type === "car" ? "Mobil" : "Motor"}</td><td>${rupiah(v.target_price)}</td><td>${status(v.status)}</td></tr>`).join("") || '<tr><td colspan="4"><div class="empty">Belum ada kendaraan.</div></td></tr>'}</tbody></table></div></div>`;
-  } : ownerVehiclesView, costs, customers: customersRoleView, leads: leadsRoleView, sales: salesRoleView, finance, reports, team: teamView, settings };
+  } : ownerVehiclesView, costs, customers: customersRoleView, leads: leadsRoleView, sales: salesRoleView, finance, reports, aging: () => agingView({state,role:currentRole(),vehicleHpp,rupiah,esc,pageHead}), team: teamView, settings };
   page.innerHTML = (state.lastLoadError
     ? `<div class="panel" role="alert" style="margin-bottom:12px;border:1px solid #d97706;padding:14px">${esc(state.lastLoadError)}</div>`
     : "") + views[state.view]();
@@ -1885,6 +1905,18 @@ function printReport(type) {
     showInCurrentTab();
   }
 }
+function stockDateInputs(data) {
+  const mode = data.stock_date_mode || (data.id ? "manual" : "input");
+  const date = data.stock_start_date || data.purchase_date || today();
+  return `<div class="span-2"><label>Perhitungan umur stok</label><select name="stock_date_mode" data-stock-date-mode>
+    <option value="input" ${mode === "input" ? "selected" : ""}>Otomatis: mulai hari data diinput</option>
+    <option value="manual" ${mode === "manual" ? "selected" : ""}>Manual: mulai dari tanggal pilihan saya</option>
+  </select><small>Tanggal beli untuk keuangan tetap terpisah dari tanggal awal stok.</small></div>
+  <div class="span-2 stock-date-manual" data-stock-manual>
+    <label>Tanggal awal stok (manual)</label>
+    <input data-stock-start-date type="date" name="stock_start_date" max="${today()}" value="${esc(date)}">
+  </div>`;
+}
 const bindPageBeforePrintableReports = bindPage;
 bindPage = function () {
   bindPageBeforePrintableReports();
@@ -1906,4 +1938,12 @@ bindPage = function () {
       renderShell();
     };
   });
+};
+
+/* Connect stock aging to the existing Owner/Admin/Sales page lifecycle. */
+const bindPageBeforeStockAging = bindPage;
+bindPage = function () {
+  bindPageBeforeStockAging();
+  bindAgingPage({state, role:currentRole(), db, vehicleHpp, rupiah, esc,
+    renderPage, loadData, toast});
 };
