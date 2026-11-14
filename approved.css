@@ -589,3 +589,43 @@ body {
 .clean-shell .data-card .card-actions [data-delete-orphan-transaction] {
   min-height: 38px;
 }
+
+
+/* Stock aging: two date modes, accessible desktop and mobile layouts */
+.age-actions{display:flex;gap:8px;flex-wrap:wrap}
+.age-panel{margin-top:16px}
+.age-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.age-tabs button{font:inherit;font-size:13px;font-weight:650;min-height:40px;padding:8px 14px;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);cursor:pointer}
+.age-tabs button.active{background:color-mix(in srgb,var(--accent) 11%,var(--surface));border-color:var(--accent);color:var(--accent)}
+.age-note{margin:2px 0 14px}
+.age-filters{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.age-filters input{flex:1;min-width:195px}
+.age-filters select{min-width:175px}
+.age-count{margin:8px 0 12px}
+.age-status{display:inline-flex;align-items:center;border:1px solid var(--border);padding:5px 9px;border-radius:7px;font-size:11px;font-weight:650;white-space:nowrap;color:var(--text);background:var(--surface-2)}
+.age-status.bad{color:#aa403a;background:color-mix(in srgb,#b64d48 9%,var(--surface));border-color:color-mix(in srgb,#b64d48 25%,var(--border))}
+.age-status.warn{color:#9b6c16;background:color-mix(in srgb,#b6872d 10%,var(--surface));border-color:color-mix(in srgb,#b6872d 25%,var(--border))}
+.age-status.watch{color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--surface))}
+.age-status.ok{color:#24765b;background:color-mix(in srgb,#33906e 8%,var(--surface))}
+.age-table th,.age-table td{vertical-align:middle}
+.age-mobile{display:none}
+.age-import-modal{width:min(700px,96vw);max-height:90vh;overflow:auto}
+.age-import-summary{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.age-import-summary span{font-size:12px;color:var(--muted)}
+.age-import-errors{max-height:180px;overflow:auto;padding:10px 12px;border:1px solid color-mix(in srgb,#b64d48 30%,var(--border));background:color-mix(in srgb,#b64d48 8%,var(--surface));border-radius:9px;color:var(--text);margin-bottom:14px;font-size:12px}
+.age-import-errors p{margin:5px 0}
+.stock-date-manual[hidden]{display:none!important}
+@media(max-width:780px){
+ .age-actions{width:100%}.age-actions .button{flex:1;justify-content:center}
+ .age-panel{padding:14px!important}
+ .age-tabs{display:grid;grid-template-columns:1fr 1fr}
+ .age-tabs button{font-size:11px;padding:9px 7px;min-height:45px}
+ .age-filters input,.age-filters select{width:100%;flex:1 1 100%}
+ .age-filters .button{width:100%}
+ .age-panel>.table-wrap{display:none}
+ .age-mobile{display:grid;gap:10px}
+ .age-card{margin:0}
+ .age-card .age-status{white-space:normal;text-align:center;max-width:130px}
+ .age-card dl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+ .age-import-modal .table-wrap{overflow-x:auto}
+}
